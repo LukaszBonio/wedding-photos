@@ -1,5 +1,5 @@
 /**
- * API client: posts photos (single request) and videos (chunked) to the
+ * API client: posts photos and videos (single request each) to the
  * Google Apps Script Web App.
  *
  * Transport constraints (GAS cannot answer a CORS preflight):
@@ -7,7 +7,7 @@
  *  - no custom headers,
  *  - JSON body with Base64 data inside.
  */
-import { MAX_UPLOAD_BASE64_LENGTH, VIDEO_CHUNK_SIZE } from '@/constants';
+import { MAX_UPLOAD_BASE64_LENGTH } from '@/constants';
 import { safeParseUploadResponse } from '@/schemas';
 import { isRetryableHttpStatus } from '@/utils/backoff';
 import { blobToBase64, estimateBase64Length } from '@/utils/blobToBase64';
@@ -104,55 +104,26 @@ export async function uploadPhoto(input: UploadInput): Promise<UploadResult> {
   return classifyResponse(raw);
 }
 
-/**
- * Uploads a video in chunks through GAS → Drive API resumable upload.
- * Never throws. Reports progress via optional callback.
- */
+/** Uploads a video in a single request via DriveApp. Never throws. */
 export async function uploadVideo(
   input: UploadInput,
   onProgress?: (percent: number) => void,
 ): Promise<UploadResult> {
-  const totalBytes = input.blob.size;
-  const totalChunks = Math.ceil(totalBytes / VIDEO_CHUNK_SIZE);
+  onProgress?.(10);
+  const dataBase64 = await blobToBase64(input.blob);
+  onProgress?.(50);
 
-  for (let i = 0; i < totalChunks; i++) {
-    const start = i * VIDEO_CHUNK_SIZE;
-    const end = Math.min(start + VIDEO_CHUNK_SIZE, totalBytes);
-    const chunkBlob = input.blob.slice(start, end);
-    const dataBase64 = await blobToBase64(chunkBlob);
-    const isLastChunk = i === totalChunks - 1;
+  const body = JSON.stringify({
+    action: 'uploadVideo',
+    token: import.meta.env.VITE_UPLOAD_TOKEN,
+    uploadId: input.uploadId,
+    filename: input.filename,
+    mimeType: input.mimeType,
+    caption: input.caption,
+    dataBase64,
+  });
 
-    const body = JSON.stringify({
-      action: 'uploadVideoChunk',
-      token: import.meta.env.VITE_UPLOAD_TOKEN,
-      uploadId: input.uploadId,
-      chunkIndex: i,
-      totalChunks,
-      totalBytes,
-      byteOffset: start,
-      filename: input.filename,
-      mimeType: input.mimeType,
-      caption: input.caption,
-      dataBase64,
-    });
-
-    const raw = await postToGas(body, VIDEO_CHUNK_TIMEOUT_MS);
-
-    if (raw.kind !== 'json') return raw as UploadResult;
-
-    const parsed = safeParseUploadResponse(raw.data);
-    if (!parsed.success)
-      return { kind: 'retryable', reason: 'Nieoczekiwana odpowiedź serwera.' };
-    if (parsed.data.status === 'error')
-      return { kind: 'permanent', reason: parsed.data.message };
-
-    if (isLastChunk) {
-      if (parsed.data.fileId) return { kind: 'success', fileId: parsed.data.fileId };
-      return { kind: 'retryable', reason: 'Brak potwierdzenia zapisu.' };
-    }
-
-    onProgress?.(Math.round(((i + 1) / totalChunks) * 100));
-  }
-
-  return { kind: 'retryable', reason: 'Nieoczekiwany koniec przesyłania.' };
+  const raw = await postToGas(body, VIDEO_CHUNK_TIMEOUT_MS);
+  onProgress?.(100);
+  return classifyResponse(raw);
 }

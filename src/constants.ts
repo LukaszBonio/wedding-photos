@@ -33,8 +33,6 @@ export const RETRY = {
 /** Maximum video file size (raw, before Base64). */
 export const MAX_VIDEO_SIZE_BYTES = 500 * 1024 * 1024; // 500 MB
 
-/** Chunk size for video uploads (decoded bytes per chunk). */
-export const VIDEO_CHUNK_SIZE = 10 * 1024 * 1024; // 10 MB
 
 /** Video MIME types accepted by the app. */
 export const ALLOWED_VIDEO_TYPES = new Set([
