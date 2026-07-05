@@ -1,28 +1,28 @@
 /**
  * Wedding photo/video upload backend — Google Apps Script Web App.
- * VERSION 4 — uses DriveApp only (no UrlFetchApp, no special scopes).
+ * VERSION 5 — chunked video via DriveApp temp files (no UrlFetchApp).
  */
 
-const CODE_VERSION = 4;
+var CODE_VERSION = 5;
 
-const MAX_DECODED_BYTES = 50 * 1024 * 1024;
-const MAX_BASE64_LENGTH = Math.ceil(MAX_DECODED_BYTES / 3) * 4 + 8;
-const CACHE_TTL_SECONDS = 21600;
-const MAX_CAPTION_LENGTH = 200;
-const DEFAULT_MAX_UPLOADS_PER_DAY = 5000;
+var MAX_DECODED_BYTES = 50 * 1024 * 1024;
+var MAX_BASE64_LENGTH = Math.ceil(MAX_DECODED_BYTES / 3) * 4 + 8;
+var CACHE_TTL_SECONDS = 21600;
+var MAX_CAPTION_LENGTH = 200;
+var DEFAULT_MAX_UPLOADS_PER_DAY = 5000;
 
-const ALLOWED_TYPES = {
+var ALLOWED_TYPES = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
 };
 
-const ALLOWED_VIDEO_TYPES = {
+var ALLOWED_VIDEO_TYPES = {
   'video/mp4': 'mp4',
   'video/quicktime': 'mov',
   'video/webm': 'webm',
 };
 
-const MAGIC_SIGNATURES = {
+var MAGIC_SIGNATURES = {
   'image/jpeg': [0xff, 0xd8, 0xff],
   'image/png': [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
 };
@@ -48,8 +48,8 @@ function doPost(e) {
     }
 
     var action = payload.action || 'uploadPhoto';
-    if (action === 'uploadVideo') {
-      return handleVideoUpload_(payload, config);
+    if (action === 'uploadVideoChunk') {
+      return handleVideoChunk_(payload, config);
     }
     return handlePhotoUpload_(payload, config);
   } catch (err) {
@@ -105,11 +105,17 @@ function handlePhotoUpload_(payload, config) {
   return ok_('Zdjęcie zapisane.', fileId);
 }
 
-// ---- Video upload (single request via DriveApp) ----------------------------
+// ---- Video chunked upload (temp files in Drive) ----------------------------
 
-function handleVideoUpload_(payload, config) {
-  var structureError = validateStructure_(payload);
-  if (structureError) return error_(structureError);
+function handleVideoChunk_(payload, config) {
+  if (!payload || typeof payload !== 'object') return error_('Brak danych.');
+  if (!isNonEmptyString_(payload.token)) return error_('Brak tokenu.');
+  if (!isNonEmptyString_(payload.uploadId)) return error_('Brak identyfikatora.');
+  if (!isValidUploadId_(payload.uploadId)) return error_('Nieprawidłowy identyfikator.');
+  if (!isNonEmptyString_(payload.dataBase64)) return error_('Brak danych.');
+  if (!isNonEmptyString_(payload.mimeType)) return error_('Brak typu pliku.');
+  if (typeof payload.chunkIndex !== 'number') return error_('Brak indeksu.');
+  if (typeof payload.totalChunks !== 'number' || payload.totalChunks <= 0) return error_('Brak liczby części.');
 
   if (!verifyToken_(payload.token, config.uploadToken))
     return error_('Nieprawidłowy token.');
@@ -123,25 +129,51 @@ function handleVideoUpload_(payload, config) {
   var existingFileId = cache.get(dedupKey);
   if (existingFileId) return ok_('Film został już przesłany.', existingFileId);
 
-  if (!isBase64LengthAllowed_(payload.dataBase64.length))
-    return error_('Film jest zbyt duży.');
-  var bytes = Utilities.base64Decode(payload.dataBase64);
-  if (!isDecodedSizeAllowed_(bytes.length))
-    return error_('Film jest zbyt duży.');
-
-  var caption = sanitizeCaption_(payload.caption);
-  if (getDailyCount_(cache) >= config.maxUploadsPerDay)
-    return error_('Dzienny limit został osiągnięty.');
-
+  var chunkBytes = Utilities.base64Decode(payload.dataBase64);
   var folder = DriveApp.getFolderById(config.folderId);
-  var ext = ALLOWED_VIDEO_TYPES[payload.mimeType];
+
+  var tempName = '_tmp_' + payload.uploadId + '_' + payload.chunkIndex;
+  var tempBlob = Utilities.newBlob(chunkBytes, 'application/octet-stream', tempName);
+  var tempFile = folder.createFile(tempBlob);
+
+  var chunksKey = 'vc_' + payload.uploadId;
+  var chunksJson = cache.get(chunksKey);
+  var chunks = chunksJson ? JSON.parse(chunksJson) : {};
+  chunks[String(payload.chunkIndex)] = tempFile.getId();
+  cache.put(chunksKey, JSON.stringify(chunks), CACHE_TTL_SECONDS);
+
+  var isLastChunk = payload.chunkIndex === payload.totalChunks - 1;
+
+  if (!isLastChunk) {
+    return jsonOutput_({
+      status: 'ok',
+      message: 'Część ' + (payload.chunkIndex + 1) + '/' + payload.totalChunks + ' przesłana.',
+      fileId: null,
+    });
+  }
+
+  var allBytes = [];
+  for (var i = 0; i < payload.totalChunks; i++) {
+    var fid = chunks[String(i)];
+    if (!fid) return error_('Brakuje części ' + (i + 1) + '.');
+    var tf = DriveApp.getFileById(fid);
+    var tb = tf.getBlob().getBytes();
+    for (var j = 0; j < tb.length; j++) {
+      allBytes.push(tb[j]);
+    }
+    tf.setTrashed(true);
+  }
+
+  var ext = ALLOWED_VIDEO_TYPES[payload.mimeType] || 'mp4';
   var filename = buildFilename_(payload.uploadId, ext, config.timeZone);
-  var blob = Utilities.newBlob(bytes, payload.mimeType, filename);
-  var file = folder.createFile(blob);
+  var caption = sanitizeCaption_(payload.caption);
+  var finalBlob = Utilities.newBlob(allBytes, payload.mimeType, filename);
+  var file = folder.createFile(finalBlob);
 
   if (caption) file.setDescription(caption);
   var fileId = file.getId();
   cache.put(dedupKey, fileId, CACHE_TTL_SECONDS);
+  cache.remove(chunksKey);
   incrementDailyCount_(cache);
   return ok_('Film zapisany.', fileId);
 }
@@ -172,18 +204,18 @@ function testDriveAccess() {
 // ---- Configuration ---------------------------------------------------------
 
 function readConfig_() {
-  const props = PropertiesService.getScriptProperties();
-  const folderId = props.getProperty('GOOGLE_DRIVE_FOLDER_ID');
-  const uploadToken = props.getProperty('UPLOAD_TOKEN');
-  const eventEndDate = props.getProperty('EVENT_END_DATE');
-  const maxRaw = props.getProperty('MAX_UPLOADS_PER_DAY');
+  var props = PropertiesService.getScriptProperties();
+  var folderId = props.getProperty('GOOGLE_DRIVE_FOLDER_ID');
+  var uploadToken = props.getProperty('UPLOAD_TOKEN');
+  var eventEndDate = props.getProperty('EVENT_END_DATE');
+  var maxRaw = props.getProperty('MAX_UPLOADS_PER_DAY');
 
   if (!folderId) return { error: 'GOOGLE_DRIVE_FOLDER_ID missing' };
   if (!uploadToken) return { error: 'UPLOAD_TOKEN missing' };
   if (!eventEndDate) return { error: 'EVENT_END_DATE missing' };
 
-  const maxParsed = maxRaw ? parseInt(maxRaw, 10) : DEFAULT_MAX_UPLOADS_PER_DAY;
-  const maxUploadsPerDay =
+  var maxParsed = maxRaw ? parseInt(maxRaw, 10) : DEFAULT_MAX_UPLOADS_PER_DAY;
+  var maxUploadsPerDay =
     isNaN(maxParsed) || maxParsed <= 0 ? DEFAULT_MAX_UPLOADS_PER_DAY : maxParsed;
 
   return {
@@ -213,8 +245,8 @@ function validateStructure_(payload) {
 function verifyToken_(provided, expected) {
   if (typeof provided !== 'string' || typeof expected !== 'string') return false;
   if (provided.length !== expected.length) return false;
-  let mismatch = 0;
-  for (let i = 0; i < expected.length; i++) {
+  var mismatch = 0;
+  for (var i = 0; i < expected.length; i++) {
     mismatch |= provided.charCodeAt(i) ^ expected.charCodeAt(i);
   }
   return mismatch === 0;
@@ -222,7 +254,7 @@ function verifyToken_(provided, expected) {
 
 function isEventOpen_(endDateStr, now) {
   if (!endDateStr) return false;
-  let endMoment;
+  var endMoment;
   if (/^\d{4}-\d{2}-\d{2}$/.test(endDateStr)) {
     endMoment = new Date(endDateStr + 'T23:59:59');
   } else {
@@ -233,7 +265,7 @@ function isEventOpen_(endDateStr, now) {
 }
 
 function detectImageType_(bytes) {
-  for (const mime in MAGIC_SIGNATURES) {
+  for (var mime in MAGIC_SIGNATURES) {
     if (matchesSignature_(bytes, MAGIC_SIGNATURES[mime])) return mime;
   }
   return null;
@@ -241,7 +273,7 @@ function detectImageType_(bytes) {
 
 function matchesSignature_(bytes, signature) {
   if (bytes.length < signature.length) return false;
-  for (let i = 0; i < signature.length; i++) {
+  for (var i = 0; i < signature.length; i++) {
     if ((bytes[i] & 0xff) !== signature[i]) return false;
   }
   return true;
@@ -256,8 +288,8 @@ function sanitizeCaption_(caption) {
 }
 
 function buildFilename_(uploadId, extension, timeZone) {
-  const stamp = Utilities.formatDate(new Date(), timeZone, 'yyyy-MM-dd_HH-mm-ss');
-  const shortId = uploadId.substring(0, 8);
+  var stamp = Utilities.formatDate(new Date(), timeZone, 'yyyy-MM-dd_HH-mm-ss');
+  var shortId = uploadId.substring(0, 8);
   return stamp + '_' + shortId + '.' + extension;
 }
 
@@ -269,13 +301,13 @@ function isBase64LengthAllowed_(length) { return length <= MAX_BASE64_LENGTH; }
 // ---- Daily counter ---------------------------------------------------------
 
 function dailyCountKey_() {
-  const tz = Session.getScriptTimeZone();
+  var tz = Session.getScriptTimeZone();
   return 'cnt_' + Utilities.formatDate(new Date(), tz, 'yyyyMMdd');
 }
 
 function getDailyCount_(cache) {
-  const raw = cache.get(dailyCountKey_());
-  const n = raw ? parseInt(raw, 10) : 0;
+  var raw = cache.get(dailyCountKey_());
+  var n = raw ? parseInt(raw, 10) : 0;
   return isNaN(n) ? 0 : n;
 }
 
