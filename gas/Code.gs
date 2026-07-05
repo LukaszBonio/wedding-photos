@@ -1,51 +1,27 @@
 /**
  * Wedding photo/video upload backend — Google Apps Script Web App.
- *
- * Deployment: Execute as = Me (USER_DEPLOYING), Access = Anyone (ANYONE_ANONYMOUS).
- * Transport: the client sends POST with Content-Type text/plain; the body is a
- * JSON string. GAS cannot answer a CORS preflight, so the client uses only a
- * "simple request" (no custom headers, text/plain). Base64 data travels inside
- * the JSON (~33% overhead, accepted consciously).
- *
- * doPost ALWAYS returns HTTP 200 with a JSON body { status, message, fileId }.
- * ContentService cannot set an HTTP status code, so the client decides
- * success/failure from the `status` field. Real infrastructure errors
- * (429 / 5xx / timeouts) never reach this code — the client retries those.
- *
- * Configuration lives ONLY in Script Properties (no hardcoding):
- *   GOOGLE_DRIVE_FOLDER_ID  (required) target folder id
- *   UPLOAD_TOKEN            (required) static spam-filter token
- *   EVENT_END_DATE         (required) e.g. "2026-09-15" — endpoint dies after it
- *   MAX_UPLOADS_PER_DAY    (optional) soft anti-spam cap, default below
+ * VERSION 3 — check via GET request to the deployment URL.
  */
 
-// ---- Fixed limits (not configurable) ---------------------------------------
+const CODE_VERSION = 3;
 
-/** Maximum allowed file size AFTER Base64 decode (images and videos). */
-const MAX_DECODED_BYTES = 25 * 1024 * 1024; // 25 MB
-/** Cheap pre-decode guard: max length of the Base64 string (~4/3 of bytes). */
+const MAX_DECODED_BYTES = 25 * 1024 * 1024;
 const MAX_BASE64_LENGTH = Math.ceil(MAX_DECODED_BYTES / 3) * 4 + 8;
-/** CacheService maximum TTL. Used for dedup entries and the daily counter. */
-const CACHE_TTL_SECONDS = 21600; // 6 h
-/** Caption hard cap. */
+const CACHE_TTL_SECONDS = 21600;
 const MAX_CAPTION_LENGTH = 200;
-/** Default soft daily upload cap (spam mitigation only). */
 const DEFAULT_MAX_UPLOADS_PER_DAY = 5000;
 
-/** Allowed image MIME types mapped to the on-disk file extension. */
 const ALLOWED_TYPES = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
 };
 
-/** Allowed video MIME types mapped to the on-disk file extension. */
 const ALLOWED_VIDEO_TYPES = {
   'video/mp4': 'mp4',
   'video/quicktime': 'mov',
   'video/webm': 'webm',
 };
 
-/** Byte signatures (magic numbers), values 0..255, per MIME type. */
 const MAGIC_SIGNATURES = {
   'image/jpeg': [0xff, 0xd8, 0xff],
   'image/png': [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
@@ -72,8 +48,8 @@ function doPost(e) {
     }
 
     var action = payload.action || 'uploadPhoto';
-    if (action === 'uploadVideo') {
-      return handleVideoUpload_(payload, config);
+    if (action === 'uploadVideoChunk') {
+      return handleVideoChunk_(payload, config);
     }
     return handlePhotoUpload_(payload, config);
   } catch (err) {
@@ -82,7 +58,12 @@ function doPost(e) {
   }
 }
 
-/** Handles a single-request photo upload. */
+function doGet() {
+  return jsonOutput_({ status: 'ok', message: 'Wedding upload endpoint.', version: CODE_VERSION, fileId: null });
+}
+
+// ---- Photo upload ----------------------------------------------------------
+
 function handlePhotoUpload_(payload, config) {
   var structureError = validateStructure_(payload);
   if (structureError) return error_(structureError);
@@ -124,12 +105,11 @@ function handlePhotoUpload_(payload, config) {
   return ok_('Zdjęcie zapisane.', fileId);
 }
 
-// ---- Video upload (single request via DriveApp) ----------------------------
+// ---- Video chunked upload --------------------------------------------------
 
-/** Handles a single-request video upload — same simplicity as photos. */
-function handleVideoUpload_(payload, config) {
-  var structureError = validateStructure_(payload);
-  if (structureError) return error_(structureError);
+function handleVideoChunk_(payload, config) {
+  var err = validateVideoChunkStructure_(payload);
+  if (err) return error_(err);
 
   if (!verifyToken_(payload.token, config.uploadToken))
     return error_('Nieprawidłowy token.');
@@ -140,34 +120,158 @@ function handleVideoUpload_(payload, config) {
 
   var cache = CacheService.getScriptCache();
   var dedupKey = 'up_' + payload.uploadId;
+  var sessionKey = 'vs_' + payload.uploadId;
+
   var existingFileId = cache.get(dedupKey);
   if (existingFileId) return ok_('Film został już przesłany.', existingFileId);
 
-  if (!isBase64LengthAllowed_(payload.dataBase64.length))
-    return error_('Film jest zbyt duży (max 25 MB).');
-  var bytes = Utilities.base64Decode(payload.dataBase64);
-  if (!isDecodedSizeAllowed_(bytes.length))
-    return error_('Film jest zbyt duży (max 25 MB).');
+  var chunkBytes = Utilities.base64Decode(payload.dataBase64);
+  var byteOffset = payload.byteOffset;
+  var totalBytes = payload.totalBytes;
+  var isLastChunk = (byteOffset + chunkBytes.length) >= totalBytes;
 
-  var caption = sanitizeCaption_(payload.caption);
-  if (getDailyCount_(cache) >= config.maxUploadsPerDay)
-    return error_('Dzienny limit został osiągnięty.');
+  var sessionUri = cache.get(sessionKey);
+  if (!sessionUri) {
+    var ext = ALLOWED_VIDEO_TYPES[payload.mimeType];
+    var filename = buildFilename_(payload.uploadId, ext, config.timeZone);
+    var session = createResumableSession_(config.folderId, filename, payload.mimeType, totalBytes);
+    if (!session.uri) return error_(session.error);
+    sessionUri = session.uri;
+    cache.put(sessionKey, sessionUri, CACHE_TTL_SECONDS);
+  }
 
-  var folder = DriveApp.getFolderById(config.folderId);
-  var ext = ALLOWED_VIDEO_TYPES[payload.mimeType];
-  var filename = buildFilename_(payload.uploadId, ext, config.timeZone);
-  var blob = Utilities.newBlob(bytes, payload.mimeType, filename);
-  var file = folder.createFile(blob);
+  var result = uploadChunkToSession_(sessionUri, chunkBytes, byteOffset, totalBytes);
+  if (result.error) return error_(result.error);
 
-  if (caption) file.setDescription(caption);
-  var fileId = file.getId();
-  cache.put(dedupKey, fileId, CACHE_TTL_SECONDS);
-  incrementDailyCount_(cache);
-  return ok_('Film zapisany.', fileId);
+  if (isLastChunk && result.fileId) {
+    var caption = sanitizeCaption_(payload.caption);
+    if (caption) {
+      try { DriveApp.getFileById(result.fileId).setDescription(caption); } catch (_) {}
+    }
+    cache.put(dedupKey, result.fileId, CACHE_TTL_SECONDS);
+    cache.remove(sessionKey);
+    incrementDailyCount_(cache);
+    return ok_('Film zapisany.', result.fileId);
+  }
+
+  return jsonOutput_({
+    status: 'ok',
+    message: 'Chunk ' + (payload.chunkIndex + 1) + ' przesłany.',
+    fileId: null,
+  });
 }
 
-function doGet() {
-  return ok_('Wedding photo upload endpoint.', null);
+function validateVideoChunkStructure_(p) {
+  if (!p || typeof p !== 'object') return 'Brak danych.';
+  if (!isNonEmptyString_(p.token)) return 'Brak tokenu.';
+  if (!isNonEmptyString_(p.uploadId)) return 'Brak identyfikatora.';
+  if (!isValidUploadId_(p.uploadId)) return 'Nieprawidłowy identyfikator.';
+  if (!isNonEmptyString_(p.filename)) return 'Brak nazwy pliku.';
+  if (!isNonEmptyString_(p.mimeType)) return 'Brak typu pliku.';
+  if (!isNonEmptyString_(p.dataBase64)) return 'Brak danych.';
+  if (typeof p.chunkIndex !== 'number') return 'Brak indeksu chunka.';
+  if (typeof p.totalBytes !== 'number' || p.totalBytes <= 0) return 'Brak rozmiaru pliku.';
+  if (typeof p.byteOffset !== 'number') return 'Brak offsetu.';
+  return null;
+}
+
+function createResumableSession_(folderId, filename, mimeType, totalBytes) {
+  var metadata = { name: filename, parents: [folderId] };
+  var token = ScriptApp.getOAuthToken();
+  try {
+    var response = UrlFetchApp.fetch(
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true',
+      {
+        method: 'POST',
+        contentType: 'application/json; charset=UTF-8',
+        headers: {
+          'Authorization': 'Bearer ' + token,
+          'X-Upload-Content-Type': mimeType,
+          'X-Upload-Content-Length': String(totalBytes),
+        },
+        payload: JSON.stringify(metadata),
+        muteHttpExceptions: true,
+      }
+    );
+    var code = response.getResponseCode();
+    if (code === 200) {
+      var allHeaders = response.getAllHeaders();
+      var locationUri = null;
+      for (var key in allHeaders) {
+        if (key.toLowerCase() === 'location') {
+          locationUri = Array.isArray(allHeaders[key]) ? allHeaders[key][0] : allHeaders[key];
+          break;
+        }
+      }
+      if (locationUri) return { uri: locationUri, error: null };
+      return { uri: null, error: 'Brak nagłówka Location w odpowiedzi (HTTP 200). Nagłówki: ' + Object.keys(allHeaders).join(', ') };
+    }
+    var body = '';
+    try { body = response.getContentText().substring(0, 300); } catch (_) {}
+    return { uri: null, error: 'Drive API HTTP ' + code + ': ' + body };
+  } catch (e) {
+    return { uri: null, error: 'Wyjątek: ' + String(e).substring(0, 300) };
+  }
+}
+
+function uploadChunkToSession_(sessionUri, chunkBytes, byteOffset, totalBytes) {
+  var endByte = byteOffset + chunkBytes.length - 1;
+  var contentRange = 'bytes ' + byteOffset + '-' + endByte + '/' + totalBytes;
+  try {
+    var response = UrlFetchApp.fetch(sessionUri, {
+      method: 'PUT',
+      contentType: 'application/octet-stream',
+      headers: { 'Content-Range': contentRange },
+      payload: chunkBytes,
+      muteHttpExceptions: true,
+    });
+    var code = response.getResponseCode();
+    if (code === 200 || code === 201) {
+      var data = JSON.parse(response.getContentText());
+      return { fileId: data.id };
+    }
+    if (code === 308) return { fileId: null };
+    return { error: 'Chunk upload HTTP ' + code + ': ' + response.getContentText().substring(0, 200) };
+  } catch (e) {
+    return { error: 'Chunk upload error: ' + String(e).substring(0, 200) };
+  }
+}
+
+// ---- Test function (run manually in GAS editor) ----------------------------
+
+function testDriveApiAccess() {
+  var config = readConfig_();
+  if (config.error) {
+    Logger.log('CONFIG ERROR: ' + config.error);
+    return;
+  }
+  Logger.log('Config OK. Folder: ' + config.folderId);
+
+  var token = ScriptApp.getOAuthToken();
+  Logger.log('Token (first 30 chars): ' + token.substring(0, 30) + '...');
+
+  var metadata = { name: 'test_upload_delete_me.mp4', parents: [config.folderId] };
+  try {
+    var response = UrlFetchApp.fetch(
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable',
+      {
+        method: 'POST',
+        contentType: 'application/json; charset=UTF-8',
+        headers: {
+          'Authorization': 'Bearer ' + token,
+          'X-Upload-Content-Type': 'video/mp4',
+          'X-Upload-Content-Length': '1024',
+        },
+        payload: JSON.stringify(metadata),
+        muteHttpExceptions: true,
+      }
+    );
+    Logger.log('HTTP Status: ' + response.getResponseCode());
+    Logger.log('Response headers: ' + JSON.stringify(response.getAllHeaders()));
+    Logger.log('Response body: ' + response.getContentText().substring(0, 500));
+  } catch (e) {
+    Logger.log('EXCEPTION: ' + e);
+  }
 }
 
 // ---- Configuration ---------------------------------------------------------
@@ -196,7 +300,7 @@ function readConfig_() {
   };
 }
 
-// ---- Validation helpers (pure) ---------------------------------------------
+// ---- Validation helpers ----------------------------------------------------
 
 function validateStructure_(payload) {
   if (!payload || typeof payload !== 'object') return 'Brak danych.';
@@ -206,13 +310,8 @@ function validateStructure_(payload) {
   if (!isNonEmptyString_(payload.filename)) return 'Brak nazwy pliku.';
   if (!isNonEmptyString_(payload.mimeType)) return 'Brak typu pliku.';
   if (!isNonEmptyString_(payload.dataBase64)) return 'Brak danych.';
-  if (
-    payload.caption !== undefined &&
-    payload.caption !== null &&
-    typeof payload.caption !== 'string'
-  ) {
+  if (payload.caption !== undefined && payload.caption !== null && typeof payload.caption !== 'string')
     return 'Nieprawidłowy opis.';
-  }
   return null;
 }
 
@@ -265,23 +364,12 @@ function buildFilename_(uploadId, extension, timeZone) {
   return stamp + '_' + shortId + '.' + extension;
 }
 
-function isNonEmptyString_(v) {
-  return typeof v === 'string' && v.length > 0;
-}
+function isNonEmptyString_(v) { return typeof v === 'string' && v.length > 0; }
+function isValidUploadId_(v) { return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v); }
+function isDecodedSizeAllowed_(byteLength) { return byteLength <= MAX_DECODED_BYTES; }
+function isBase64LengthAllowed_(length) { return length <= MAX_BASE64_LENGTH; }
 
-function isValidUploadId_(v) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
-}
-
-function isDecodedSizeAllowed_(byteLength) {
-  return byteLength <= MAX_DECODED_BYTES;
-}
-
-function isBase64LengthAllowed_(length) {
-  return length <= MAX_BASE64_LENGTH;
-}
-
-// ---- Daily counter (soft, best-effort) -------------------------------------
+// ---- Daily counter ---------------------------------------------------------
 
 function dailyCountKey_() {
   const tz = Session.getScriptTimeZone();
@@ -301,9 +389,7 @@ function incrementDailyCount_(cache) {
 // ---- Response helpers ------------------------------------------------------
 
 function jsonOutput_(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(
-    ContentService.MimeType.JSON,
-  );
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
 function ok_(message, fileId) {
