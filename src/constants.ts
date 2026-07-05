@@ -30,11 +30,8 @@ export const RETRY = {
   maxDelayMs: 60000,
 } as const;
 
-/** Maximum video file size (raw, before Base64). */
-export const MAX_VIDEO_SIZE_BYTES = 500 * 1024 * 1024; // 500 MB
-
-/** Chunk size for video uploads (decoded bytes per chunk). */
-export const VIDEO_CHUNK_SIZE = 10 * 1024 * 1024; // 10 MB
+/** Maximum video file size (raw, before Base64). Must stay under GAS 50MB request limit. */
+export const MAX_VIDEO_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
 
 /** Video MIME types accepted by the app. */
 export const ALLOWED_VIDEO_TYPES = new Set([

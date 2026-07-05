@@ -64,7 +64,7 @@ export const useUploadStore = defineStore('upload', () => {
   });
 
   const queue = createUploadQueue({
-    upload: async (item, onProgress) => {
+    upload: async (item) => {
       const photo = await getPhoto(item.uploadId);
       if (!photo) return { kind: 'success', fileId: '' };
       const input = {
@@ -75,7 +75,7 @@ export const useUploadStore = defineStore('upload', () => {
         caption: photo.caption,
       };
       if (isVideoMimeType(photo.mimeType)) {
-        return uploadVideo(input, onProgress);
+        return uploadVideo(input);
       }
       return uploadPhoto(input);
     },
