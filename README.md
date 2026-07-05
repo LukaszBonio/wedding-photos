@@ -12,7 +12,7 @@
 Gosc skanuje kod QR, robi zdjecie, wysyla. Zdjecia laduja na Waszym Dysku Google.
 Bez logowania, bez instalacji, bez kont.
 
-[Zglos problem](https://github.com/LukaszBonio/wedding-photos/issues)
+[Live Demo](https://wesele-anna-lukasz.pages.dev/) · [Zglos problem](https://github.com/LukaszBonio/wedding-photos/issues)
 
 </div>
 
@@ -50,7 +50,7 @@ Nie ma zadnego wlasnego serwera ani bazy danych do utrzymania.
 
 ## Szybki start
 
-> **Czas**: ok. 30-45 minut · **Wymagania**: konto Google + konto GitHub (oba darmowe)
+> **Czas**: ok. 30-45 minut · **Wymagania**: konto Google + konto GitHub + konto Cloudflare (wszystkie darmowe)
 > Nie musisz umiec programowac.
 
 ### 1. Folder na Dysku Google
@@ -79,7 +79,7 @@ Nie ma zadnego wlasnego serwera ani bazy danych do utrzymania.
    | `UPLOAD_TOKEN` | dlugi, losowy ciag znakow | `wesele-2026-9f3k7t2q8w` |
    | `EVENT_END_DATE` | ostatni dzien przyjmowania zdjec | `2026-09-13` |
 
-   > **UPLOAD_TOKEN** wymysl sam — im dluzszy, tym lepiej. Zapamietaj go, bo wpiszesz go tez w GitHub.
+   > **UPLOAD_TOKEN** wymysl sam — im dluzszy, tym lepiej. Zapamietaj go, bo wpiszesz go tez w Cloudflare.
    > Po **EVENT_END_DATE** (wlacznie) aplikacja przestaje przyjmowac zdjecia.
 
 4. Kliknij **Wdroz → Nowe wdrozenie**:
@@ -101,7 +101,7 @@ Nie ma zadnego wlasnego serwera ani bazy danych do utrzymania.
 
    | Ustawienie | Wartosc |
    |------------|---------|
-   | **Project name** | np. `anna-lukasz` (bedzie w adresie) |
+   | **Project name** | np. `wesele-anna-lukasz` (bedzie w adresie) |
    | **Production branch** | `master` |
    | **Build command** | `npm run build` |
    | **Build output directory** | `dist` |
@@ -115,7 +115,7 @@ Nie ma zadnego wlasnego serwera ani bazy danych do utrzymania.
 
 4. Kliknij **Save and Deploy**. Adres strony:
    ```
-   https://anna-lukasz.pages.dev/
+   https://wesele-anna-lukasz.pages.dev/
    ```
 
 ### 4. Kod QR na stoliki
@@ -160,7 +160,7 @@ Zdjecia to dane osobowe — trafiaja na **Wasz prywatny Dysk Google**, nie do fi
 |-------|-------|------------|
 | Pojemnosc Dysku | 15 GB (darmowe) | ~8 000-10 000 zdjec po kompresji (~1-2 MB/szt.) |
 | Czas wykonania GAS | 6 min / wywolanie | Zapis trwa ulamek sekundy |
-| Rownolegle wykonania | ~30 | Aplikacja wysyla max 2 zdjecia na raz |
+| Rownolegle wykonania | ~30 | Aplikacja wysyla po 1 zdjeciu na raz |
 
 Przy typowym weselu (100-150 gosci) to z zapasem wystarcza. Przy wiekszej imprezie rozważ konto Google Workspace.
 
