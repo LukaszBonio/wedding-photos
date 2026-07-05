@@ -13,7 +13,7 @@ export const MAX_GALLERY_BATCH = 10;
 export const MAX_OFFLINE_QUEUE = 20;
 
 /** Maximum simultaneous uploads per device. */
-export const MAX_CONCURRENT_UPLOADS = 2;
+export const MAX_CONCURRENT_UPLOADS = 1;
 
 /**
  * Client-side hard guard on the Base64 payload length (~18 MB) before sending.
