@@ -1,260 +1,232 @@
-# Zdjęcia weselne 📷
+<div align="center">
 
-Aplikacja (PWA), dzięki której goście weselni jednym dotknięciem wysyłają zdjęcia
-prosto do folderu na Waszym Dysku Google — bez logowania, bez instalacji, bez kont.
-Gość skanuje kod QR, robi zdjęcie (albo wybiera z galerii), opcjonalnie dopisuje
-krótki opis i wysyła. Zdjęcia lądują na Waszym Dysku Google.
+# Zdjecia weselne
 
-- **Bez aplikacji do zainstalowania** — otwiera się w przeglądarce telefonu.
-- **Działa offline** — brak zasięgu na sali? Zdjęcie poczeka i wyśle się samo, gdy wróci internet.
-- **Prywatnie** — zdjęcia trafiają na Wasz Dysk Google, nie na żaden obcy serwer.
-- **Dla każdego** — duże przyciski, polskie napisy, prosty i elegancki ekran.
+**PWA do przesylania zdjec weselnych na Dysk Google**
 
----
+[![Deploy](https://github.com/LukaszBonio/wedding-photos/actions/workflows/deploy.yml/badge.svg)](https://github.com/LukaszBonio/wedding-photos/actions/workflows/deploy.yml)
+![Vue 3](https://img.shields.io/badge/Vue-3-4FC08D?logo=vuedotjs&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)
+![PWA](https://img.shields.io/badge/PWA-ready-5A0FC8?logo=pwa&logoColor=white)
 
-## Spis treści
+Gosc skanuje kod QR, robi zdjecie, wysyla. Zdjecia laduja na Waszym Dysku Google.
+Bez logowania, bez instalacji, bez kont.
 
-1. [Jak to działa](#jak-to-działa)
-2. [Co będzie potrzebne](#co-będzie-potrzebne)
-3. [Wdrożenie krok po kroku](#wdrożenie-krok-po-kroku)
-   - [Część 1 — Folder na Dysku Google](#część-1--folder-na-dysku-google)
-   - [Część 2 — Backend (Google Apps Script)](#część-2--backend-google-apps-script)
-   - [Część 3 — Publikacja strony (GitHub Pages)](#część-3--publikacja-strony-github-pages)
-   - [Część 4 — Kod QR na stoliki](#część-4--kod-qr-na-stoliki)
-4. [Checklista przedślubna](#checklista-przedślubna)
-5. [Bezpieczeństwo i świadome kompromisy](#bezpieczeństwo-i-świadome-kompromisy)
-6. [Limity Google (Drive / Apps Script)](#limity-google-drive--apps-script)
-7. [Rozwiązywanie problemów](#rozwiązywanie-problemów)
-8. [Dla programistów (uruchomienie lokalne)](#dla-programistów-uruchomienie-lokalne)
+[Live Demo](https://lukaszbonio.github.io/wedding-photos/) · [Zglos problem](https://github.com/LukaszBonio/wedding-photos/issues)
+
+</div>
 
 ---
 
-## Jak to działa
+## Dlaczego to istnieje
+
+- **Bez aplikacji do zainstalowania** — otwiera sie w przegladarce telefonu
+- **Dziala offline** — brak zasiegu na sali? Zdjecie poczeka i wysle sie samo
+- **Prywatnie** — zdjecia trafiaja na Wasz Dysk Google, nie na zaden obcy serwer
+- **Dla kazdego** — duze przyciski, polskie napisy, prosty i elegancki ekran
+
+---
+
+## Jak to dziala
 
 ```
-Gość (telefon)                     Wasz Dysk Google
-┌──────────────┐   HTTPS POST     ┌────────────────┐
-│  Strona PWA  │ ───────────────► │ Google Apps    │ ──► Folder ze zdjęciami
-│ (GitHub Pages)│  zdjęcie (JPEG) │ Script (backend)│
-└──────────────┘                  └────────────────┘
+  Gosc (telefon)                        Wasz Dysk Google
+ +-----------------+    HTTPS POST    +------------------+
+ |    Strona PWA   | --------------> | Google Apps      |
+ |  (GitHub Pages) |   zdjecie JPEG  | Script (backend) | ----> Folder ze zdjeciami
+ +-----------------+                 +------------------+
 ```
 
-Strona to statyczna aplikacja hostowana za darmo na GitHub Pages. Backendem jest
-skrypt Google Apps Script działający na Waszym koncie Google — to on zapisuje pliki
-w folderze. Nie ma żadnego własnego serwera ani bazy danych do utrzymania.
+| Warstwa | Technologia | Koszt |
+|---------|-------------|-------|
+| Frontend | GitHub Pages (statyczna PWA) | darmowy |
+| Backend | Google Apps Script | darmowy |
+| Storage | Google Drive | darmowy (15 GB) |
+
+Nie ma zadnego wlasnego serwera ani bazy danych do utrzymania.
 
 ---
 
-## Co będzie potrzebne
+## Szybki start
 
-- **Konto Google** (najlepiej dedykowane na wesele — patrz uwaga o pojemności niżej).
-- **Konto GitHub** (darmowe) — do hostowania strony.
-- Około **30–45 minut** na jednorazową konfigurację.
+> **Czas**: ok. 30-45 minut · **Wymagania**: konto Google + konto GitHub (oba darmowe)
+> Nie musisz umiec programowac.
 
-Nie musisz umieć programować. Wystarczy dokładnie wykonać poniższe kroki.
+### 1. Folder na Dysku Google
 
----
-
-## Wdrożenie krok po kroku
-
-### Część 1 — Folder na Dysku Google
-
-1. Wejdź na [drive.google.com](https://drive.google.com) i utwórz nowy folder,
-   np. **„Zdjęcia weselne"**.
-2. Otwórz ten folder. Popatrz na adres w przeglądarce — wygląda tak:
-   `https://drive.google.com/drive/folders/`**`1AbC...XyZ`**
-3. Skopiuj tę końcówkę (ciąg po `folders/`). To jest **ID folderu** — przyda się za chwilę.
-
-### Część 2 — Backend (Google Apps Script)
-
-1. Wejdź na [script.google.com](https://script.google.com) → **Nowy projekt**.
-2. Nazwij projekt (np. „Wesele — upload"), a następnie:
-   - W lewym panelu kliknij plik `Code.gs`, usuń jego zawartość i wklej całą
-     zawartość pliku [`gas/Code.gs`](gas/Code.gs) z tego repozytorium.
-   - Wejdź w **Ustawienia projektu** (ikona koła zębatego) i zaznacz
-     **„Pokaż plik manifestu »appsscript.json« w edytorze"**. Wróć do edytora,
-     otwórz `appsscript.json` i wklej zawartość [`gas/appsscript.json`](gas/appsscript.json).
-3. Ustaw dane konfiguracyjne w **Ustawienia projektu → Właściwości skryptu**
-   (Script Properties). Dodaj trzy właściwości:
-
-   | Nazwa | Wartość | Przykład |
-   |---|---|---|
-   | `GOOGLE_DRIVE_FOLDER_ID` | ID folderu z Części 1 | `1AbC...XyZ` |
-   | `UPLOAD_TOKEN` | długi, losowy ciąg znaków | `wesele-2026-9f3k7t2q8w...` |
-   | `EVENT_END_DATE` | ostatni dzień przyjmowania zdjęć (`RRRR-MM-DD`) | `2026-09-13` |
-
-   > `UPLOAD_TOKEN` wymyśl sam — im dłuższy i bardziej losowy, tym lepiej.
-   > Zapamiętaj go: ten **sam** ciąg wpiszesz później w GitHub jako `VITE_UPLOAD_TOKEN`.
-   > Po `EVENT_END_DATE` (włącznie do końca tego dnia) aplikacja przestaje przyjmować zdjęcia.
-
-4. Kliknij **Wdróż → Nowe wdrożenie**:
-   - **Typ**: „Aplikacja internetowa" (Web app).
-   - **Wykonaj jako**: „Ja" (Me).
-   - **Kto ma dostęp**: „Wszyscy" (Anyone).
-   - Kliknij **Wdróż**, zatwierdź uprawnienia (Google zapyta o dostęp do Dysku — zezwól).
-   - Skopiuj **URL aplikacji internetowej** — kończy się na **`/exec`**.
-     Ten adres wpiszesz w GitHub jako `VITE_GAS_URL`.
-
-> ⚠️ **Najważniejsza pułapka Apps Script.** Sama edycja kodu **nie** aktualizuje
-> działającej aplikacji. Po **każdej** zmianie w `Code.gs` musisz zrobić:
-> **Wdróż → Zarządzaj wdrożeniami → (ołówek/Edytuj) → Wersja: Nowa wersja → Wdróż**.
-> Adres `/exec` pozostaje ten sam, ale zaczyna serwować nowy kod dopiero po utworzeniu nowej wersji.
-
-**Szybki test backendu (opcjonalnie):** wklej URL `/exec` w przeglądarce — powinien
-zwrócić krótką odpowiedź JSON (np. o nieprawidłowym żądaniu), a nie błąd Google.
-To znaczy, że backend żyje.
-
-### Część 3 — Publikacja strony (GitHub Pages)
-
-1. Utwórz na GitHub **nowe repozytorium** o nazwie **`wedding-photos`** i wgraj do
-   niego zawartość tego projektu (przez „Upload files" lub `git push`).
-
-   > 📌 Nazwa repozytorium musi brzmieć dokładnie **`wedding-photos`**, bo taka jest
-   > ścieżka bazowa aplikacji. Jeśli chcesz inną nazwę, zmień `BASE_PATH`
-   > w pliku `vite.config.ts` (to jedyne miejsce) na `'/twoja-nazwa/'`.
-
-2. W repozytorium wejdź w **Settings → Secrets and variables → Actions →
-   New repository secret** i dodaj **dwa sekrety**:
-
-   | Nazwa sekretu | Wartość |
-   |---|---|
-   | `VITE_GAS_URL` | adres `/exec` z Części 2 |
-   | `VITE_UPLOAD_TOKEN` | ten sam `UPLOAD_TOKEN` co w Script Properties |
-
-3. Wejdź w **Settings → Pages** i w polu **Source** wybierz **„GitHub Actions"**.
-4. Gotowe. Każdy push do gałęzi `main` automatycznie zbuduje i opublikuje stronę
-   (workflow: [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)).
-   Po zakończeniu (zakładka **Actions**) strona będzie pod adresem:
-
+1. Wejdz na [drive.google.com](https://drive.google.com) i utworz nowy folder, np. **"Zdjecia weselne"**.
+2. Otworz ten folder. Z adresu w przegladarce skopiuj **ID folderu** — ciag po `folders/`:
    ```
-   https://TWOJA-NAZWA-UZYTKOWNIKA.github.io/wedding-photos/
+   https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOpQrStUvWxYz
+                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                          to jest ID folderu
    ```
 
-### Część 4 — Kod QR na stoliki
+### 2. Backend (Google Apps Script)
 
-1. Wygeneruj kod QR z adresem strony z Części 3 (dowolny generator QR, np. wpisz
-   adres w wyszukiwarkę „generator QR").
-2. Wydrukuj go **duży i czytelny**, z krótką zachętą, np.
-   *„Zeskanuj i podziel się z nami zdjęciami z tego dnia 💛"*.
-3. Rozłóż na stolikach. To wszystko — goście skanują i wysyłają.
+1. Wejdz na [script.google.com](https://script.google.com) → **Nowy projekt**.
+2. Nazwij projekt (np. "Wesele — upload"), a nastepnie:
+   - Otworz plik `Code.gs`, usun zawartosc i wklej cala zawartosc pliku [`gas/Code.gs`](gas/Code.gs).
+   - Wejdz w **Ustawienia projektu** (ikona kola zebatego) → zaznacz **"Pokaz plik manifestu"**.
+     Wroc do edytora, otworz `appsscript.json` i wklej zawartosc [`gas/appsscript.json`](gas/appsscript.json).
 
----
+3. W **Ustawienia projektu → Wlasciwosci skryptu** dodaj:
 
-## Checklista przedślubna
+   | Wlasciwosc | Wartosc | Przyklad |
+   |------------|---------|----------|
+   | `GOOGLE_DRIVE_FOLDER_ID` | ID folderu z kroku 1 | `1AbCdEfGhIjKlMnOp` |
+   | `UPLOAD_TOKEN` | dlugi, losowy ciag znakow | `wesele-2026-9f3k7t2q8w` |
+   | `EVENT_END_DATE` | ostatni dzien przyjmowania zdjec | `2026-09-13` |
 
-- [ ] `EVENT_END_DATE` ustawiona na właściwy dzień (np. dzień po weselu).
-- [ ] Podmienione **ikony PWA** — pliki w `public/icons/` to tymczasowe placeholdery.
-      Wstaw własne (192×192 i 512×512 PNG; dla iOS warto dodać 180×180 jako
-      `apple-touch-icon`).
-- [ ] Kod QR **wygenerowany i wydrukowany**, przetestowany skanerem telefonu.
-- [ ] **Test end-to-end na iPhonie (Safari)** i **Androidzie (Chrome)**: zrób
-      zdjęcie → wyślij → sprawdź, że plik pojawił się w folderze na Dysku.
-- [ ] **Test trybu offline**: włącz tryb samolotowy → wyślij zdjęcie → włącz
-      internet → sprawdź, że wysłało się samo.
-- [ ] **Pojemność Dysku** sprawdzona (ile wolnego miejsca — patrz niżej).
-- [ ] Rozważ **dedykowane konto Google** na wesele (czyste 15 GB, porządek, prywatność).
+   > **UPLOAD_TOKEN** wymysl sam — im dluzszy, tym lepiej. Zapamietaj go, bo wpiszesz go tez w GitHub.
+   > Po **EVENT_END_DATE** (wlacznie) aplikacja przestaje przyjmowac zdjecia.
 
----
+4. Kliknij **Wdroz → Nowe wdrozenie**:
+   - Typ: **Aplikacja internetowa** (Web app)
+   - Wykonaj jako: **Ja** (Me)
+   - Kto ma dostep: **Wszyscy** (Anyone)
+   - Kliknij **Wdroz**, zatwierdz uprawnienia Google
+   - Skopiuj **URL aplikacji** (konczy sie na `/exec`)
 
-## Bezpieczeństwo i świadome kompromisy
+> [!WARNING]
+> **Pulapka Apps Script:** sama edycja kodu **nie** aktualizuje dzialajacego wdrozenia.
+> Po kazdej zmianie w `Code.gs` musisz: **Wdroz → Zarzadzaj wdrozeniami → (olowek) → Wersja: Nowa wersja → Wdroz**.
 
-Ta aplikacja jest zaprojektowana pod **maksymalną frekwencję gości**, a nie pod
-poziom bezpieczeństwa banku. Świadomie przyjęto następujące kompromisy:
+### 3. Publikacja strony (GitHub Pages)
 
-- **Token jest publiczny.** Każda zmienna `VITE_*` trafia do kodu przeglądarki, więc
-  `VITE_UPLOAD_TOKEN` jest widoczny dla każdego, kto otworzy stronę. To **nie** jest
-  tajny klucz — to filtr odsiewający przypadkowy ruch i proste boty. Kto ma link/QR,
-  ten ma i token. To celowe: brak logowania = więcej wysłanych zdjęć.
-- **Każdy z linkiem może wysłać zdjęcie.** Taki jest zamysł (goście). Zabezpieczenia
-  to: token, data zakończenia (`EVENT_END_DATE`), walidacja typu i rozmiaru pliku
-  oraz sanityzacja opisu.
-- **Brak automatycznej moderacji treści.** Zdjęcia trafiają wprost do folderu.
-  W razie nadużyć możesz: zmienić `UPLOAD_TOKEN` (unieważnia stary link), cofnąć
-  wdrożenie Apps Script, lub po prostu usunąć plik z Dysku.
-- **Dane gości.** Zdjęcia to dane osobowe i trafiają na **Wasz prywatny Dysk Google**
-  — nie do żadnej firmy trzeciej. Upload zawsze idzie do sieci i **nie** jest
-  cache'owany przez aplikację.
-- **Idempotencja.** Każde zdjęcie ma unikalny identyfikator, więc ponowienie wysyłki
-  (np. po chwilowym braku sieci) nie tworzy duplikatów na Dysku.
+1. Utworz na GitHub **nowe repozytorium** o nazwie **`wedding-photos`** i wgraj projekt.
 
-Jeśli potrzebujesz twardej kontroli dostępu lub moderacji — ta architektura nie jest
-do tego przeznaczona.
+   > Nazwa repo musi byc dokladnie **`wedding-photos`**, bo taka jest sciezka bazowa.
+   > Jesli chcesz inna nazwe, zmien `BASE_PATH` w `vite.config.ts`.
 
----
+2. W **Settings → Secrets and variables → Actions** dodaj dwa sekrety:
 
-## Limity Google (Drive / Apps Script)
+   | Sekret | Wartosc |
+   |--------|---------|
+   | `VITE_GAS_URL` | URL `/exec` z kroku 2 |
+   | `VITE_UPLOAD_TOKEN` | ten sam token co w Script Properties |
 
-**Pojemność Dysku.** Darmowe konto Google ma **15 GB** współdzielone z Gmailem i
-Dyskiem. Zdjęcie po kompresji waży zwykle ~1–2 MB, co daje orientacyjnie
-**~8 000–10 000 zdjęć** na czystym koncie. Jeśli konto jest już zapełnione albo
-spodziewasz się ogromnej liczby zdjęć, użyj dedykowanego konta lub wykup Google One.
+3. W **Settings → Pages → Source** wybierz **"GitHub Actions"**.
 
-**Apps Script.** Backend korzysta z limitów konta Google:
+4. Gotowe! Kazdy push do galezi `master` automatycznie zbuduje i opublikuje strone:
+   ```
+   https://TWOJ-LOGIN.github.io/wedding-photos/
+   ```
 
-- czas jednego wykonania do **6 minut** (nasz zapis trwa ułamek sekundy),
-- ok. **30 równoczesnych wykonań**,
-- dzienne limity zapisów na Dysku.
+### 4. Kod QR na stoliki
 
-Aplikacja sama łagodzi obciążenie: wysyła maksymalnie **2 zdjęcia równolegle** na
-telefon i **ponawia z odczekiwaniem** (backoff) przy błędach. Przy typowym weselu
-(ok. 100–150 gości) to z zapasem wystarcza. Przy bardzo dużej imprezie rozważ konto
-Google Workspace (wyższe limity).
+1. Wygeneruj kod QR z adresem strony (dowolny generator QR).
+2. Wydrukuj **duzy i czytelny**, z krotka zacheta, np.:
+   > *"Zeskanuj i podziel sie z nami zdjeciami z tego dnia"*
+3. Rozloz na stolikach.
 
 ---
 
-## Rozwiązywanie problemów
+## Checklista przedslubna
 
-**Nic się nie wysyła / błąd wysyłki.**
-Sprawdź kolejno: (1) `VITE_GAS_URL` kończy się na `/exec`; (2) po każdej zmianie
-kodu `Code.gs` utworzono **nową wersję wdrożenia** Apps Script; (3) `UPLOAD_TOKEN`
-w Script Properties jest **identyczny** z sekretem `VITE_UPLOAD_TOKEN` w GitHub.
-
-**Biała strona / błędy 404 na plikach po wdrożeniu.**
-Niezgodna ścieżka bazowa. Repozytorium musi nazywać się `wedding-photos` **albo**
-zmień `BASE_PATH` w `vite.config.ts` na `'/nazwa-twojego-repo/'` i wypchnij zmianę.
-
-**Błąd „CORS" w konsoli.**
-Apps Script odpowiada przez przekierowanie (302) — to normalne. Aplikacja używa
-prostego żądania (`Content-Type: text/plain`, bez własnych nagłówków), więc nie
-wywołuje preflightu. Jeśli mimo to widzisz CORS przy preflight — upewnij się, że do
-żądania nie dodano żadnych dodatkowych nagłówków.
-
-**Komunikat o HEIC.**
-Format HEIC dekoduje natywnie tylko Safari. Na Androidzie/komputerze aplikacja
-poprosi o wybór zdjęcia JPEG lub zmianę ustawień aparatu. Na iPhonie działa bez zmian.
-
-**iOS: zdjęcie „utknęło" po zablokowaniu ekranu.**
-iOS usypia karty w tle. Aplikacja wznawia wysyłkę po powrocie do karty. Poproś
-gości, żeby nie zamykali karty do zakończenia wysyłki (jest o tym komunikat na ekranie).
-
-**„Przekroczono limit".**
-Chwilowo osiągnięto limit Google. Aplikacja sama ponawia po odczekaniu; przy bardzo
-dużym ruchu rozważ konto Workspace.
+- [ ] `EVENT_END_DATE` ustawiona na wlasciwy dzien (np. dzien po weselu)
+- [ ] Podmienione **ikony PWA** — pliki w `public/icons/` to placeholdery
+- [ ] Kod QR **wygenerowany, wydrukowany i przetestowany**
+- [ ] **Test na iPhonie (Safari)** i **Androidzie (Chrome)**: zdjecie → wyslij → sprawdz folder
+- [ ] **Test offline**: tryb samolotowy → wyslij → wlacz internet → sprawdz
+- [ ] **Pojemnosc Dysku** sprawdzona (ile wolnego miejsca)
 
 ---
 
-## Dla programistów (uruchomienie lokalne)
+## Bezpieczenstwo
 
-Wymagania: **Node.js 20.19+ lub 22**.
+> [!NOTE]
+> Aplikacja jest zaprojektowana pod **maksymalna frekwencje gosci**, nie pod poziom bezpieczenstwa banku.
+
+| Kompromis | Dlaczego |
+|-----------|----------|
+| Token jest publiczny | Zmienne `VITE_*` trafiaja do kodu przegladarki. Token odsiewa przypadkowy ruch, nie jest tajnym kluczem |
+| Kazdy z linkiem moze wyslac | Taki jest zamysl — brak logowania = wiecej zdjec |
+| Brak moderacji tresci | Zdjecia trafiaja wprost do folderu. Mozesz zmienic token lub usunac plik |
+| Idempotencja | Kazde zdjecie ma UUID — ponowienie nie tworzy duplikatow |
+
+Zdjecia to dane osobowe — trafiaja na **Wasz prywatny Dysk Google**, nie do firmy trzeciej.
+
+---
+
+## Limity Google
+
+| Zasob | Limit | W praktyce |
+|-------|-------|------------|
+| Pojemnosc Dysku | 15 GB (darmowe) | ~8 000-10 000 zdjec po kompresji (~1-2 MB/szt.) |
+| Czas wykonania GAS | 6 min / wywolanie | Zapis trwa ulamek sekundy |
+| Rownolegle wykonania | ~30 | Aplikacja wysyla max 2 zdjecia na raz |
+
+Przy typowym weselu (100-150 gosci) to z zapasem wystarcza. Przy wiekszej imprezie rozważ konto Google Workspace.
+
+---
+
+## Rozwiazywanie problemow
+
+<details>
+<summary><strong>Nic sie nie wysyla / blad wysylki</strong></summary>
+
+1. `VITE_GAS_URL` konczy sie na `/exec`
+2. Po zmianie `Code.gs` utworzono **nowa wersje wdrozenia**
+3. `UPLOAD_TOKEN` w Script Properties jest **identyczny** z `VITE_UPLOAD_TOKEN` w GitHub
+
+</details>
+
+<details>
+<summary><strong>Biala strona / bledy 404</strong></summary>
+
+Niezgodna sciezka bazowa. Repo musi nazywac sie `wedding-photos` albo zmien `BASE_PATH` w `vite.config.ts`.
+
+</details>
+
+<details>
+<summary><strong>Blad CORS w konsoli</strong></summary>
+
+Apps Script odpowiada przez przekierowanie (302) — to normalne. Aplikacja uzywa prostego zadania (`Content-Type: text/plain`), wiec nie wywoluje preflightu. Jesli widzisz CORS — sprawdz, czy nie dodano dodatkowych naglowkow.
+
+</details>
+
+<details>
+<summary><strong>Komunikat o HEIC</strong></summary>
+
+HEIC dekoduje natywnie tylko Safari. Na Androidzie aplikacja poprosi o JPEG. Na iPhonie dziala bez zmian.
+
+</details>
+
+<details>
+<summary><strong>iOS: zdjecie "utknelo" po zablokowaniu ekranu</strong></summary>
+
+iOS usypia karty w tle. Aplikacja wznawia wysylke po powrocie do karty.
+
+</details>
+
+---
+
+## Dla programistow
+
+> **Wymagania:** Node.js 20.19+ lub 22
 
 ```bash
 npm install
-cp .env.example .env.local   # uzupełnij VITE_GAS_URL i VITE_UPLOAD_TOKEN
+cp .env.example .env.local   # uzupelnij VITE_GAS_URL i VITE_UPLOAD_TOKEN
 npm run dev                  # serwer deweloperski
 ```
 
-Pozostałe polecenia:
+| Polecenie | Opis |
+|-----------|------|
+| `npm run build` | Build produkcyjny → `dist/` |
+| `npm run preview` | Podglad builda |
+| `npm run test` | Testy (Vitest) |
+| `npm run lint` | ESLint |
+| `npm run format` | Prettier |
 
-```bash
-npm run build        # produkcyjny build (z type-checkiem) → dist/
-npm run preview      # podgląd produkcyjnego builda
-npm run test         # testy jednostkowe i komponentów (Vitest)
-npm run lint         # ESLint
-npm run format       # Prettier
-```
+### Stos technologiczny
 
-**Stos technologiczny:** Vue 3 + TypeScript, Pinia, Vite, vite-plugin-pwa (Workbox),
-Dexie (IndexedDB), Zod. Kompresja zdjęć w Web Workerze (OffscreenCanvas) z fallbackiem
-na główny wątek. Kolejka wysyłki z ponawianiem i trwałością offline w IndexedDB.
-Backend: Google Apps Script (`gas/`). Hosting: GitHub Pages. Bez własnego serwera,
-bez Firebase/Supabase.
+**Frontend:** Vue 3 · TypeScript · Pinia · Vite · vite-plugin-pwa (Workbox) · Dexie (IndexedDB) · Zod
+
+**Backend:** Google Apps Script
+
+**Hosting:** GitHub Pages
+
+Kompresja zdjec w Web Workerze (OffscreenCanvas) z fallbackiem na glowny watek. Kolejka wysylki z ponawianiem i trwaloscia offline w IndexedDB.
