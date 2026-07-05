@@ -34,6 +34,8 @@ function onSelect(files: File[]): void {
 
       <PhotoSourceButtons @select="onSelect" />
 
+      <p class="photographer-note">Prosimy, nie przeszkadzajcie fotografowi podczas sesji — Wasze ujęcia zbierzemy tutaj!</p>
+
       <p v-if="store.pickError" class="alert" role="alert">{{ store.pickError }}</p>
 
       <GoldRule />
@@ -41,10 +43,10 @@ function onSelect(files: File[]): void {
 
     <div v-if="store.processing" class="overlay" role="status" aria-live="polite">
       <div class="overlay__card surface-glass">
-        <p class="overlay__title">Przygotowuję zdjęcia…</p>
+        <p class="overlay__title">Przygotowuję pliki…</p>
         <ProgressBar
           :value="store.processingTotal ? (store.processingDone / store.processingTotal) * 100 : 0"
-          label="Przygotowywanie zdjęć"
+          label="Przygotowywanie plików"
         />
         <p class="overlay__count">{{ store.processingDone }} z {{ store.processingTotal }}</p>
       </div>
@@ -113,6 +115,17 @@ function onSelect(files: File[]): void {
   margin: 0;
   color: var(--color-text-muted);
   font-size: 1.05rem;
+}
+
+.photographer-note {
+  margin: 0;
+  padding: 0.7rem 1rem;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-gold) 12%, transparent);
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  text-align: center;
+  line-height: 1.45;
 }
 
 .alert {
