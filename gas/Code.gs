@@ -165,8 +165,9 @@ function handleVideoChunk_(payload, config) {
   if (!sessionUri) {
     var ext = ALLOWED_VIDEO_TYPES[payload.mimeType];
     var filename = buildFilename_(payload.uploadId, ext, config.timeZone);
-    sessionUri = createResumableSession_(config.folderId, filename, payload.mimeType, totalBytes);
-    if (!sessionUri) return error_('Nie udało się utworzyć sesji przesyłania.');
+    var session = createResumableSession_(config.folderId, filename, payload.mimeType, totalBytes);
+    if (!session.uri) return error_(session.error || 'Nie udało się utworzyć sesji przesyłania.');
+    sessionUri = session.uri;
     cache.put(sessionKey, sessionUri, CACHE_TTL_SECONDS);
   }
 
@@ -223,15 +224,19 @@ function createResumableSession_(folderId, filename, mimeType, totalBytes) {
         muteHttpExceptions: true,
       }
     );
-    if (response.getResponseCode() === 200) {
+    var code = response.getResponseCode();
+    if (code === 200) {
       var headers = response.getHeaders();
-      return headers['Location'] || headers['location'] || null;
+      return { uri: headers['Location'] || headers['location'] || null, error: null };
     }
-    console.error('createResumableSession_ HTTP ' + response.getResponseCode() + ': ' + response.getContentText());
-    return null;
+    var detail = 'Drive API HTTP ' + code;
+    try { detail += ': ' + response.getContentText().substring(0, 200); } catch (_) {}
+    console.error('createResumableSession_: ' + detail);
+    return { uri: null, error: detail };
   } catch (e) {
-    console.error('createResumableSession_ error: ' + e);
-    return null;
+    var msg = 'createResumableSession_ exception: ' + e;
+    console.error(msg);
+    return { uri: null, error: msg };
   }
 }
 
