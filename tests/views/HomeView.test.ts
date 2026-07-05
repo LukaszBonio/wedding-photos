@@ -16,21 +16,18 @@ describe('HomeView', () => {
   it('renders the greeting and all capture buttons', () => {
     const wrapper = mount(HomeView);
     expect(wrapper.text()).toContain('Anna & Łukasz');
-    expect(wrapper.findAll('button')).toHaveLength(3);
+    expect(wrapper.findAll('button')).toHaveLength(2);
     expect(wrapper.text()).toContain('Zrób zdjęcie');
-    expect(wrapper.text()).toContain('Nagraj wideo');
     expect(wrapper.text()).toContain('Wybierz z galerii');
   });
 
-  it('exposes camera, video and gallery file inputs', () => {
+  it('exposes camera and gallery file inputs', () => {
     const wrapper = mount(HomeView);
     const inputs = wrapper.findAll('input[type="file"]');
-    expect(inputs).toHaveLength(3);
+    expect(inputs).toHaveLength(2);
     expect(inputs[0]!.attributes('capture')).toBe('environment');
     expect(inputs[0]!.attributes('accept')).toBe('image/*');
-    expect(inputs[1]!.attributes('capture')).toBe('environment');
-    expect(inputs[1]!.attributes('accept')).toBe('video/*');
-    expect(inputs[2]!.attributes('multiple')).toBeDefined();
-    expect(inputs[2]!.attributes('capture')).toBeUndefined();
+    expect(inputs[1]!.attributes('multiple')).toBeDefined();
+    expect(inputs[1]!.attributes('capture')).toBeUndefined();
   });
 });

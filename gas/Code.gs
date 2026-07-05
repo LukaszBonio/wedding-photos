@@ -1,9 +1,9 @@
 /**
- * Wedding photo/video upload backend — Google Apps Script Web App.
- * VERSION 5 — chunked video via DriveApp temp files (no UrlFetchApp).
+ * Wedding photo upload backend — Google Apps Script Web App.
+ * VERSION 6 — photo-only (video upload removed).
  */
 
-var CODE_VERSION = 5;
+var CODE_VERSION = 6;
 
 var MAX_DECODED_BYTES = 50 * 1024 * 1024;
 var MAX_BASE64_LENGTH = Math.ceil(MAX_DECODED_BYTES / 3) * 4 + 8;
@@ -14,12 +14,6 @@ var DEFAULT_MAX_UPLOADS_PER_DAY = 5000;
 var ALLOWED_TYPES = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
-};
-
-var ALLOWED_VIDEO_TYPES = {
-  'video/mp4': 'mp4',
-  'video/quicktime': 'mov',
-  'video/webm': 'webm',
 };
 
 var MAGIC_SIGNATURES = {
@@ -47,10 +41,6 @@ function doPost(e) {
       return error_('Nieprawidłowy format danych.');
     }
 
-    var action = payload.action || 'uploadPhoto';
-    if (action === 'uploadVideoChunk') {
-      return handleVideoChunk_(payload, config);
-    }
     return handlePhotoUpload_(payload, config);
   } catch (err) {
     console.error('doPost error: ' + (err && err.stack ? err.stack : err));
@@ -103,79 +93,6 @@ function handlePhotoUpload_(payload, config) {
   cache.put(dedupKey, fileId, CACHE_TTL_SECONDS);
   incrementDailyCount_(cache);
   return ok_('Zdjęcie zapisane.', fileId);
-}
-
-// ---- Video chunked upload (temp files in Drive) ----------------------------
-
-function handleVideoChunk_(payload, config) {
-  if (!payload || typeof payload !== 'object') return error_('Brak danych.');
-  if (!isNonEmptyString_(payload.token)) return error_('Brak tokenu.');
-  if (!isNonEmptyString_(payload.uploadId)) return error_('Brak identyfikatora.');
-  if (!isValidUploadId_(payload.uploadId)) return error_('Nieprawidłowy identyfikator.');
-  if (!isNonEmptyString_(payload.dataBase64)) return error_('Brak danych.');
-  if (!isNonEmptyString_(payload.mimeType)) return error_('Brak typu pliku.');
-  if (typeof payload.chunkIndex !== 'number') return error_('Brak indeksu.');
-  if (typeof payload.totalChunks !== 'number' || payload.totalChunks <= 0) return error_('Brak liczby części.');
-
-  if (!verifyToken_(payload.token, config.uploadToken))
-    return error_('Nieprawidłowy token.');
-  if (!isEventOpen_(config.eventEndDate, new Date()))
-    return error_('Zbieranie zdjęć zostało zakończone.');
-  if (!ALLOWED_VIDEO_TYPES[payload.mimeType])
-    return error_('Nieobsługiwany format wideo.');
-
-  var cache = CacheService.getScriptCache();
-  var dedupKey = 'up_' + payload.uploadId;
-  var existingFileId = cache.get(dedupKey);
-  if (existingFileId) return ok_('Film został już przesłany.', existingFileId);
-
-  var chunkBytes = Utilities.base64Decode(payload.dataBase64);
-  var folder = DriveApp.getFolderById(config.folderId);
-
-  var tempName = '_tmp_' + payload.uploadId + '_' + payload.chunkIndex;
-  var tempBlob = Utilities.newBlob(chunkBytes, 'application/octet-stream', tempName);
-  var tempFile = folder.createFile(tempBlob);
-
-  var chunksKey = 'vc_' + payload.uploadId;
-  var chunksJson = cache.get(chunksKey);
-  var chunks = chunksJson ? JSON.parse(chunksJson) : {};
-  chunks[String(payload.chunkIndex)] = tempFile.getId();
-  cache.put(chunksKey, JSON.stringify(chunks), CACHE_TTL_SECONDS);
-
-  var isLastChunk = payload.chunkIndex === payload.totalChunks - 1;
-
-  if (!isLastChunk) {
-    return jsonOutput_({
-      status: 'ok',
-      message: 'Część ' + (payload.chunkIndex + 1) + '/' + payload.totalChunks + ' przesłana.',
-      fileId: null,
-    });
-  }
-
-  var allBytes = [];
-  for (var i = 0; i < payload.totalChunks; i++) {
-    var fid = chunks[String(i)];
-    if (!fid) return error_('Brakuje części ' + (i + 1) + '.');
-    var tf = DriveApp.getFileById(fid);
-    var tb = tf.getBlob().getBytes();
-    for (var j = 0; j < tb.length; j++) {
-      allBytes.push(tb[j]);
-    }
-    tf.setTrashed(true);
-  }
-
-  var ext = ALLOWED_VIDEO_TYPES[payload.mimeType] || 'mp4';
-  var filename = buildFilename_(payload.uploadId, ext, config.timeZone);
-  var caption = sanitizeCaption_(payload.caption);
-  var finalBlob = Utilities.newBlob(allBytes, payload.mimeType, filename);
-  var file = folder.createFile(finalBlob);
-
-  if (caption) file.setDescription(caption);
-  var fileId = file.getId();
-  cache.put(dedupKey, fileId, CACHE_TTL_SECONDS);
-  cache.remove(chunksKey);
-  incrementDailyCount_(cache);
-  return ok_('Film zapisany.', fileId);
 }
 
 // ---- Test function (run manually in GAS editor) ----------------------------

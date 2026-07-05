@@ -6,9 +6,9 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 
-import { uploadPhoto, uploadVideo } from '@/api/gasClient';
+import { uploadPhoto } from '@/api/gasClient';
 import { useNetworkStatus } from '@/composables/useNetworkStatus';
-import { MAX_GALLERY_BATCH, MAX_OFFLINE_QUEUE, MAX_VIDEO_SIZE_BYTES } from '@/constants';
+import { MAX_GALLERY_BATCH, MAX_OFFLINE_QUEUE } from '@/constants';
 import { deletePhoto, getPhoto, loadValidPhotos, putPhoto, updatePhoto } from '@/db/dexie';
 import { compressImage } from '@/services/imageProcessor';
 import { createUploadQueue, type QueueItem } from '@/services/uploadQueue';
@@ -31,14 +31,8 @@ export interface PhotoVm {
 
 const SENDING_VIEWS: readonly AppView[] = ['uploading', 'offline', 'success', 'error'];
 
-function rejectionMessage(reason: FileRejectReason): string {
-  return reason === 'unsupported-video'
-    ? 'Ten format wideo nie jest obsługiwany. Użyj MP4, MOV lub WebM.'
-    : 'Ten plik jest pusty. Wybierz inne zdjęcie.';
-}
-
-function isVideoMimeType(mimeType: string): boolean {
-  return mimeType.startsWith('video/');
+function rejectionMessage(_reason: FileRejectReason): string {
+  return 'Ten plik jest pusty. Wybierz inne zdjęcie.';
 }
 
 export const useUploadStore = defineStore('upload', () => {
@@ -67,17 +61,13 @@ export const useUploadStore = defineStore('upload', () => {
     upload: async (item, onProgress) => {
       const photo = await getPhoto(item.uploadId);
       if (!photo) return { kind: 'success', fileId: '' };
-      const input = {
+      return uploadPhoto({
         uploadId: photo.uploadId,
         blob: photo.blob,
         filename: photo.filename,
         mimeType: photo.mimeType,
         caption: photo.caption,
-      };
-      if (isVideoMimeType(photo.mimeType)) {
-        return uploadVideo(input, onProgress);
-      }
-      return uploadPhoto(input);
+      });
     },
     persist: (id, changes) => updatePhoto(id, changes),
     remove: (id) => deletePhoto(id),
@@ -140,7 +130,7 @@ export const useUploadStore = defineStore('upload', () => {
     }
   }
 
-  /** Validates, compresses (images) or stages (videos) picked files, then shows the preview. */
+  /** Validates and compresses picked image files, then shows the preview. */
   async function pickFiles(files: File[]): Promise<void> {
     pickError.value = null;
     const remaining = MAX_OFFLINE_QUEUE - photos.value.length;
@@ -162,61 +152,32 @@ export const useUploadStore = defineStore('upload', () => {
         }
         const uploadId = generateUploadId();
 
-        if (validation.kind === 'video') {
-          if (file.size > MAX_VIDEO_SIZE_BYTES) {
-            pickError.value = `Film jest zbyt duży (max ${Math.round(MAX_VIDEO_SIZE_BYTES / 1024 / 1024)} MB).`;
-            processingDone.value += 1;
-            continue;
-          }
+        try {
+          const output = await compressImage(file, uploadId);
           const photo: QueuedPhoto = {
             uploadId,
-            blob: file,
-            filename: buildClientFilename(uploadId, file.type),
-            mimeType: file.type,
+            blob: output.blob,
+            filename: buildClientFilename(uploadId, 'image/jpeg'),
+            mimeType: 'image/jpeg',
             caption: '',
             createdAt: Date.now(),
             attempts: 0,
             status: 'ready',
-            progress: 0,
+            progress: 100,
             lastError: null,
           };
           await putPhoto(photo);
           photos.value.push({
             uploadId,
-            objectUrl: URL.createObjectURL(file),
-            mimeType: file.type,
+            objectUrl: URL.createObjectURL(output.blob),
+            mimeType: 'image/jpeg',
             status: 'ready',
-            progress: 0,
+            progress: 100,
             error: null,
           });
-        } else {
-          try {
-            const output = await compressImage(file, uploadId);
-            const photo: QueuedPhoto = {
-              uploadId,
-              blob: output.blob,
-              filename: buildClientFilename(uploadId, 'image/jpeg'),
-              mimeType: 'image/jpeg',
-              caption: '',
-              createdAt: Date.now(),
-              attempts: 0,
-              status: 'ready',
-              progress: 100,
-              lastError: null,
-            };
-            await putPhoto(photo);
-            photos.value.push({
-              uploadId,
-              objectUrl: URL.createObjectURL(output.blob),
-              mimeType: 'image/jpeg',
-              status: 'ready',
-              progress: 100,
-              error: null,
-            });
-          } catch (error) {
-            pickError.value =
-              error instanceof Error ? error.message : 'Nie udało się przetworzyć zdjęcia.';
-          }
+        } catch (error) {
+          pickError.value =
+            error instanceof Error ? error.message : 'Nie udało się przetworzyć zdjęcia.';
         }
         processingDone.value += 1;
       }

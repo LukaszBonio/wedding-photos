@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import {
   HEADER_BYTES_TO_READ,
   isBatchSizeAllowed,
-  isVideoType,
   readHeaderBytes,
   validateFile,
 } from '@/utils/fileValidation';
@@ -13,13 +12,6 @@ function fileFrom(bytes: number[], type: string, name = 'f'): File {
 }
 
 const JPEG = [0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10];
-
-describe('isVideoType', () => {
-  it('flags video MIME types', () => {
-    expect(isVideoType('video/mp4')).toBe(true);
-    expect(isVideoType('image/jpeg')).toBe(false);
-  });
-});
 
 describe('isBatchSizeAllowed', () => {
   it('rejects zero and over-limit, accepts within limit', () => {
@@ -48,16 +40,6 @@ describe('validateFile', () => {
   it('rejects an empty file', async () => {
     const result = await validateFile(fileFrom([], 'image/jpeg'));
     expect(result).toEqual({ ok: false, reason: 'empty' });
-  });
-
-  it('accepts a supported video file', async () => {
-    const result = await validateFile(fileFrom(JPEG, 'video/mp4'));
-    expect(result).toEqual({ ok: true, kind: 'video', format: null });
-  });
-
-  it('rejects an unsupported video format', async () => {
-    const result = await validateFile(fileFrom(JPEG, 'video/avi'));
-    expect(result).toEqual({ ok: false, reason: 'unsupported-video' });
   });
 
   it('accepts a JPEG and reports its format', async () => {

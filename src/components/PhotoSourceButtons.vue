@@ -6,7 +6,6 @@ import AppButton from '@/components/AppButton.vue';
 const emit = defineEmits<{ select: [files: File[]] }>();
 
 const cameraInput = ref<HTMLInputElement | null>(null);
-const videoInput = ref<HTMLInputElement | null>(null);
 const galleryInput = ref<HTMLInputElement | null>(null);
 
 function onChange(event: Event): void {
@@ -19,10 +18,7 @@ function onChange(event: Event): void {
 
 <template>
   <div class="sources">
-    <div class="sources__capture">
-      <AppButton variant="primary" @click="cameraInput?.click()">Zrób zdjęcie</AppButton>
-      <AppButton variant="primary" @click="videoInput?.click()">Nagraj wideo</AppButton>
-    </div>
+    <AppButton variant="primary" @click="cameraInput?.click()">Zrób zdjęcie</AppButton>
     <AppButton variant="secondary" @click="galleryInput?.click()">Wybierz z galerii</AppButton>
 
     <input
@@ -34,18 +30,10 @@ function onChange(event: Event): void {
       @change="onChange"
     />
     <input
-      ref="videoInput"
-      class="visually-hidden"
-      type="file"
-      accept="video/*"
-      capture="environment"
-      @change="onChange"
-    />
-    <input
       ref="galleryInput"
       class="visually-hidden"
       type="file"
-      accept="image/*,video/*"
+      accept="image/*"
       multiple
       @change="onChange"
     />
@@ -57,15 +45,5 @@ function onChange(event: Event): void {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
-}
-.sources__capture {
-  display: flex;
-  gap: 0.55rem;
-}
-.sources__capture :deep(.btn) {
-  flex: 1;
-  min-width: 0;
-  font-size: 0.9rem;
-  padding: 0.8rem 0.4rem;
 }
 </style>

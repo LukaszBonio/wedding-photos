@@ -2,7 +2,7 @@
 export type DetectedImageFormat = 'image/jpeg' | 'image/png' | 'image/heic';
 
 /** Media kind flag attached to validated files. */
-export type MediaKind = 'image' | 'video';
+export type MediaKind = 'image';
 
 /** Lifecycle status of a photo in the upload queue. */
 export type PhotoStatus = 'ready' | 'uploading' | 'success' | 'error' | 'offline';
