@@ -58,7 +58,7 @@ export const useUploadStore = defineStore('upload', () => {
   });
 
   const queue = createUploadQueue({
-    upload: async (item, onProgress) => {
+    upload: async (item, _onProgress) => {
       const photo = await getPhoto(item.uploadId);
       if (!photo) return { kind: 'success', fileId: '' };
       return uploadPhoto({
