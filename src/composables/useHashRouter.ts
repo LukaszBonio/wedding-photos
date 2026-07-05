@@ -52,8 +52,7 @@ export function useHashRouter(): HashRouter {
   const navigate = (next: AppView): void => {
     view.value = next;
     const targetHash = hashForView(next);
-    if (window.location.hash !== targetHash) {
-      // Assigning the hash adds a history entry and fires `hashchange`.
+    if (typeof window !== 'undefined' && window.location.hash !== targetHash) {
       window.location.hash = targetHash;
     }
   };
