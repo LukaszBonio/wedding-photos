@@ -4,7 +4,6 @@
 
 **PWA do przesylania zdjec weselnych na Dysk Google**
 
-[![Deploy](https://github.com/LukaszBonio/wedding-photos/actions/workflows/deploy.yml/badge.svg)](https://github.com/LukaszBonio/wedding-photos/actions/workflows/deploy.yml)
 ![Vue 3](https://img.shields.io/badge/Vue-3-4FC08D?logo=vuedotjs&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)
@@ -13,7 +12,7 @@
 Gosc skanuje kod QR, robi zdjecie, wysyla. Zdjecia laduja na Waszym Dysku Google.
 Bez logowania, bez instalacji, bez kont.
 
-[Live Demo](https://lukaszbonio.github.io/wedding-photos/) · [Zglos problem](https://github.com/LukaszBonio/wedding-photos/issues)
+[Zglos problem](https://github.com/LukaszBonio/wedding-photos/issues)
 
 </div>
 
@@ -34,13 +33,14 @@ Bez logowania, bez instalacji, bez kont.
   Gosc (telefon)                        Wasz Dysk Google
  +-----------------+    HTTPS POST    +------------------+
  |    Strona PWA   | --------------> | Google Apps      |
- |  (GitHub Pages) |   zdjecie JPEG  | Script (backend) | ----> Folder ze zdjeciami
+ | (Cloudflare    |   zdjecie JPEG  | Script (backend) | ----> Folder ze zdjeciami
+ |  Pages)        |                 |                  |
  +-----------------+                 +------------------+
 ```
 
 | Warstwa | Technologia | Koszt |
 |---------|-------------|-------|
-| Frontend | GitHub Pages (statyczna PWA) | darmowy |
+| Frontend | Cloudflare Pages (statyczna PWA) | darmowy |
 | Backend | Google Apps Script | darmowy |
 | Storage | Google Drive | darmowy (15 GB) |
 
@@ -93,25 +93,29 @@ Nie ma zadnego wlasnego serwera ani bazy danych do utrzymania.
 > **Pulapka Apps Script:** sama edycja kodu **nie** aktualizuje dzialajacego wdrozenia.
 > Po kazdej zmianie w `Code.gs` musisz: **Wdroz → Zarzadzaj wdrozeniami → (olowek) → Wersja: Nowa wersja → Wdroz**.
 
-### 3. Publikacja strony (GitHub Pages)
+### 3. Publikacja strony (Cloudflare Pages)
 
-1. Utworz na GitHub **nowe repozytorium** o nazwie **`wedding-photos`** i wgraj projekt.
+1. Wejdz na [dash.cloudflare.com](https://dash.cloudflare.com) → **Workers & Pages** → **Create** → **Pages** → **Connect to Git**.
 
-   > Nazwa repo musi byc dokladnie **`wedding-photos`**, bo taka jest sciezka bazowa.
-   > Jesli chcesz inna nazwe, zmien `BASE_PATH` w `vite.config.ts`.
+2. Wybierz repo **wedding-photos** i ustaw:
 
-2. W **Settings → Secrets and variables → Actions** dodaj dwa sekrety:
+   | Ustawienie | Wartosc |
+   |------------|---------|
+   | **Project name** | np. `anna-lukasz` (bedzie w adresie) |
+   | **Production branch** | `master` |
+   | **Build command** | `npm run build` |
+   | **Build output directory** | `dist` |
 
-   | Sekret | Wartosc |
-   |--------|---------|
+3. Rozwin **Environment variables** i dodaj:
+
+   | Zmienna | Wartosc |
+   |---------|---------|
    | `VITE_GAS_URL` | URL `/exec` z kroku 2 |
    | `VITE_UPLOAD_TOKEN` | ten sam token co w Script Properties |
 
-3. W **Settings → Pages → Source** wybierz **"GitHub Actions"**.
-
-4. Gotowe! Kazdy push do galezi `master` automatycznie zbuduje i opublikuje strone:
+4. Kliknij **Save and Deploy**. Adres strony:
    ```
-   https://TWOJ-LOGIN.github.io/wedding-photos/
+   https://anna-lukasz.pages.dev/
    ```
 
 ### 4. Kod QR na stoliki
@@ -169,14 +173,14 @@ Przy typowym weselu (100-150 gosci) to z zapasem wystarcza. Przy wiekszej imprez
 
 1. `VITE_GAS_URL` konczy sie na `/exec`
 2. Po zmianie `Code.gs` utworzono **nowa wersje wdrozenia**
-3. `UPLOAD_TOKEN` w Script Properties jest **identyczny** z `VITE_UPLOAD_TOKEN` w GitHub
+3. `UPLOAD_TOKEN` w Script Properties jest **identyczny** z `VITE_UPLOAD_TOKEN` w Cloudflare
 
 </details>
 
 <details>
 <summary><strong>Biala strona / bledy 404</strong></summary>
 
-Niezgodna sciezka bazowa. Repo musi nazywac sie `wedding-photos` albo zmien `BASE_PATH` w `vite.config.ts`.
+Sprawdz, czy `BASE_PATH` w `vite.config.ts` jest ustawiony na `'/'`.
 
 </details>
 
@@ -227,6 +231,6 @@ npm run dev                  # serwer deweloperski
 
 **Backend:** Google Apps Script
 
-**Hosting:** GitHub Pages
+**Hosting:** Cloudflare Pages
 
 Kompresja zdjec w Web Workerze (OffscreenCanvas) z fallbackiem na glowny watek. Kolejka wysylki z ponawianiem i trwaloscia offline w IndexedDB.

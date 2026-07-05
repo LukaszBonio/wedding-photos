@@ -4,10 +4,7 @@ import { defineConfig } from 'vitest/config';
 import vue from '@vitejs/plugin-vue';
 import { VitePWA } from 'vite-plugin-pwa';
 
-// Base path is the GitHub Pages sub-path. It MUST stay in sync with the
-// Service Worker scope and every path inside the PWA manifest. Change it in
-// exactly one place: here.
-const BASE_PATH = '/wedding-photos/';
+const BASE_PATH = '/';
 
 // Gold accent from the biel/beż/złoto palette; also used as the PWA theme color.
 const THEME_COLOR = '#C8A96A';
