@@ -50,18 +50,23 @@ describe('validateFile', () => {
     expect(result).toEqual({ ok: false, reason: 'empty' });
   });
 
-  it('rejects a video file', async () => {
+  it('accepts a supported video file', async () => {
     const result = await validateFile(fileFrom(JPEG, 'video/mp4'));
-    expect(result).toEqual({ ok: false, reason: 'video' });
+    expect(result).toEqual({ ok: true, kind: 'video', format: null });
+  });
+
+  it('rejects an unsupported video format', async () => {
+    const result = await validateFile(fileFrom(JPEG, 'video/avi'));
+    expect(result).toEqual({ ok: false, reason: 'unsupported-video' });
   });
 
   it('accepts a JPEG and reports its format', async () => {
     const result = await validateFile(fileFrom(JPEG, 'image/jpeg'));
-    expect(result).toEqual({ ok: true, format: 'image/jpeg' });
+    expect(result).toEqual({ ok: true, kind: 'image', format: 'image/jpeg' });
   });
 
   it('accepts an unrecognised signature with a null format', async () => {
     const result = await validateFile(fileFrom([0x00, 0x01, 0x02, 0x03], 'image/webp'));
-    expect(result).toEqual({ ok: true, format: null });
+    expect(result).toEqual({ ok: true, kind: 'image', format: null });
   });
 });

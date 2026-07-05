@@ -34,10 +34,17 @@ const MAX_CAPTION_LENGTH = 200;
 /** Default soft daily upload cap (spam mitigation only). */
 const DEFAULT_MAX_UPLOADS_PER_DAY = 5000;
 
-/** Allowed MIME types mapped to the on-disk file extension. */
+/** Allowed image MIME types mapped to the on-disk file extension. */
 const ALLOWED_TYPES = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
+};
+
+/** Allowed video MIME types mapped to the on-disk file extension. */
+const ALLOWED_VIDEO_TYPES = {
+  'video/mp4': 'mp4',
+  'video/quicktime': 'mov',
+  'video/webm': 'webm',
 };
 
 /** Byte signatures (magic numbers), values 0..255, per MIME type. */
@@ -55,95 +62,200 @@ const MAGIC_SIGNATURES = {
  */
 function doPost(e) {
   try {
-    // 0) Server must be configured. Fail closed on any missing property.
-    const config = readConfig_();
+    var config = readConfig_();
     if (config.error) {
       console.error('Config error: ' + config.error);
       return error_('Serwer nie jest poprawnie skonfigurowany.');
     }
 
-    // 1) Parse + validate request structure. Reject anything incomplete.
     if (!e || !e.postData || typeof e.postData.contents !== 'string') {
       return error_('Brak danych żądania.');
     }
-    let payload;
+    var payload;
     try {
       payload = JSON.parse(e.postData.contents);
     } catch (parseErr) {
       return error_('Nieprawidłowy format danych.');
     }
-    const structureError = validateStructure_(payload);
-    if (structureError) {
-      return error_(structureError);
-    }
 
-    // 2) Static token (constant-time compare).
-    if (!verifyToken_(payload.token, config.uploadToken)) {
-      return error_('Nieprawidłowy token.');
+    var action = payload.action || 'uploadPhoto';
+    if (action === 'uploadVideoChunk') {
+      return handleVideoChunk_(payload, config);
     }
-
-    // 3) Event window. After EVENT_END_DATE every upload is refused.
-    if (!isEventOpen_(config.eventEndDate, new Date())) {
-      return error_('Zbieranie zdjęć zostało zakończone.');
-    }
-
-    // 4) Idempotency. If this uploadId already produced a file, return it
-    //    without writing again — this absorbs lost-response retries.
-    const cache = CacheService.getScriptCache();
-    const dedupKey = 'up_' + payload.uploadId;
-    const existingFileId = cache.get(dedupKey);
-    if (existingFileId) {
-      return ok_('Zdjęcie zostało już przyjęte.', existingFileId);
-    }
-
-    // 5) File validation. Cheap length guard first, then decode, size,
-    //    signature, and MIME-vs-signature agreement.
-    if (!isBase64LengthAllowed_(payload.dataBase64.length)) {
-      return error_('Plik jest zbyt duży.');
-    }
-    const bytes = Utilities.base64Decode(payload.dataBase64);
-    if (!isDecodedSizeAllowed_(bytes.length)) {
-      return error_('Plik jest zbyt duży.');
-    }
-    const detectedType = detectImageType_(bytes);
-    if (!detectedType) {
-      return error_('Nieobsługiwany format pliku.');
-    }
-    if (detectedType !== payload.mimeType) {
-      return error_('Typ pliku nie zgadza się z zawartością.');
-    }
-
-    // 6) Sanitize caption.
-    const caption = sanitizeCaption_(payload.caption);
-
-    // 7) Soft daily cap (best-effort; CacheService is not transactional).
-    if (getDailyCount_(cache) >= config.maxUploadsPerDay) {
-      return error_('Dzienny limit został osiągnięty.');
-    }
-
-    // 8) Write to the pre-existing folder. Never search, never create folders.
-    const folder = DriveApp.getFolderById(config.folderId);
-    const extension = ALLOWED_TYPES[detectedType];
-    const filename = buildFilename_(payload.uploadId, extension, config.timeZone);
-    const blob = Utilities.newBlob(bytes, detectedType, filename);
-    const file = folder.createFile(blob);
-
-    // 9) Guest caption goes into the file description metadata.
-    if (caption) {
-      file.setDescription(caption);
-    }
-    const fileId = file.getId();
-
-    // Persist dedup entry AFTER a successful write, then bump the counter.
-    cache.put(dedupKey, fileId, CACHE_TTL_SECONDS);
-    incrementDailyCount_(cache);
-
-    // 10) Success response.
-    return ok_('Zdjęcie zapisane.', fileId);
+    return handlePhotoUpload_(payload, config);
   } catch (err) {
-    // Unexpected (e.g. Drive quota). Report an error the client will retry.
     console.error('doPost error: ' + (err && err.stack ? err.stack : err));
     return error_('Błąd serwera podczas zapisu.');
+  }
+}
+
+/** Handles a single-request photo upload (existing behaviour). */
+function handlePhotoUpload_(payload, config) {
+  var structureError = validateStructure_(payload);
+  if (structureError) return error_(structureError);
+
+  if (!verifyToken_(payload.token, config.uploadToken))
+    return error_('Nieprawidłowy token.');
+  if (!isEventOpen_(config.eventEndDate, new Date()))
+    return error_('Zbieranie zdjęć zostało zakończone.');
+
+  var cache = CacheService.getScriptCache();
+  var dedupKey = 'up_' + payload.uploadId;
+  var existingFileId = cache.get(dedupKey);
+  if (existingFileId) return ok_('Zdjęcie zostało już przyjęte.', existingFileId);
+
+  if (!isBase64LengthAllowed_(payload.dataBase64.length))
+    return error_('Plik jest zbyt duży.');
+  var bytes = Utilities.base64Decode(payload.dataBase64);
+  if (!isDecodedSizeAllowed_(bytes.length))
+    return error_('Plik jest zbyt duży.');
+  var detectedType = detectImageType_(bytes);
+  if (!detectedType) return error_('Nieobsługiwany format pliku.');
+  if (detectedType !== payload.mimeType)
+    return error_('Typ pliku nie zgadza się z zawartością.');
+
+  var caption = sanitizeCaption_(payload.caption);
+  if (getDailyCount_(cache) >= config.maxUploadsPerDay)
+    return error_('Dzienny limit został osiągnięty.');
+
+  var folder = DriveApp.getFolderById(config.folderId);
+  var extension = ALLOWED_TYPES[detectedType];
+  var filename = buildFilename_(payload.uploadId, extension, config.timeZone);
+  var blob = Utilities.newBlob(bytes, detectedType, filename);
+  var file = folder.createFile(blob);
+
+  if (caption) file.setDescription(caption);
+  var fileId = file.getId();
+  cache.put(dedupKey, fileId, CACHE_TTL_SECONDS);
+  incrementDailyCount_(cache);
+  return ok_('Zdjęcie zapisane.', fileId);
+}
+
+// ---- Video chunked upload (Drive API resumable) ---------------------------
+
+/**
+ * Handles one chunk of a multi-part video upload. The first chunk (index 0)
+ * creates a Drive API resumable session; subsequent chunks continue it.
+ * The session URI is cached for up to 6 h (CACHE_TTL_SECONDS).
+ */
+function handleVideoChunk_(payload, config) {
+  var err = validateVideoChunkStructure_(payload);
+  if (err) return error_(err);
+
+  if (!verifyToken_(payload.token, config.uploadToken))
+    return error_('Nieprawidłowy token.');
+  if (!isEventOpen_(config.eventEndDate, new Date()))
+    return error_('Zbieranie zdjęć zostało zakończone.');
+  if (!ALLOWED_VIDEO_TYPES[payload.mimeType])
+    return error_('Nieobsługiwany format wideo.');
+
+  var cache = CacheService.getScriptCache();
+  var dedupKey = 'up_' + payload.uploadId;
+  var sessionKey = 'vs_' + payload.uploadId;
+
+  var existingFileId = cache.get(dedupKey);
+  if (existingFileId) return ok_('Film został już przesłany.', existingFileId);
+
+  var chunkBytes = Utilities.base64Decode(payload.dataBase64);
+  var byteOffset = payload.byteOffset;
+  var totalBytes = payload.totalBytes;
+  var isLastChunk = (byteOffset + chunkBytes.length) >= totalBytes;
+
+  var sessionUri = cache.get(sessionKey);
+  if (!sessionUri) {
+    var ext = ALLOWED_VIDEO_TYPES[payload.mimeType];
+    var filename = buildFilename_(payload.uploadId, ext, config.timeZone);
+    sessionUri = createResumableSession_(config.folderId, filename, payload.mimeType, totalBytes);
+    if (!sessionUri) return error_('Nie udało się utworzyć sesji przesyłania.');
+    cache.put(sessionKey, sessionUri, CACHE_TTL_SECONDS);
+  }
+
+  var result = uploadChunkToSession_(sessionUri, chunkBytes, byteOffset, totalBytes);
+  if (result.error) return error_(result.error);
+
+  if (isLastChunk && result.fileId) {
+    var caption = sanitizeCaption_(payload.caption);
+    if (caption) {
+      try { DriveApp.getFileById(result.fileId).setDescription(caption); } catch (_) {}
+    }
+    cache.put(dedupKey, result.fileId, CACHE_TTL_SECONDS);
+    cache.remove(sessionKey);
+    incrementDailyCount_(cache);
+    return ok_('Film zapisany.', result.fileId);
+  }
+
+  return jsonOutput_({
+    status: 'ok',
+    message: 'Chunk ' + (payload.chunkIndex + 1) + ' przesłany.',
+    fileId: null,
+    chunkIndex: payload.chunkIndex,
+  });
+}
+
+function validateVideoChunkStructure_(p) {
+  if (!p || typeof p !== 'object') return 'Brak danych.';
+  if (!isNonEmptyString_(p.token)) return 'Brak tokenu.';
+  if (!isNonEmptyString_(p.uploadId)) return 'Brak identyfikatora.';
+  if (!isValidUploadId_(p.uploadId)) return 'Nieprawidłowy identyfikator.';
+  if (!isNonEmptyString_(p.filename)) return 'Brak nazwy pliku.';
+  if (!isNonEmptyString_(p.mimeType)) return 'Brak typu pliku.';
+  if (!isNonEmptyString_(p.dataBase64)) return 'Brak danych.';
+  if (typeof p.chunkIndex !== 'number') return 'Brak indeksu chunka.';
+  if (typeof p.totalBytes !== 'number' || p.totalBytes <= 0) return 'Brak rozmiaru pliku.';
+  if (typeof p.byteOffset !== 'number') return 'Brak offsetu.';
+  return null;
+}
+
+function createResumableSession_(folderId, filename, mimeType, totalBytes) {
+  var metadata = { name: filename, parents: [folderId] };
+  try {
+    var response = UrlFetchApp.fetch(
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable',
+      {
+        method: 'POST',
+        contentType: 'application/json; charset=UTF-8',
+        headers: {
+          'Authorization': 'Bearer ' + ScriptApp.getOAuthToken(),
+          'X-Upload-Content-Type': mimeType,
+          'X-Upload-Content-Length': String(totalBytes),
+        },
+        payload: JSON.stringify(metadata),
+        muteHttpExceptions: true,
+      }
+    );
+    if (response.getResponseCode() === 200) {
+      var headers = response.getHeaders();
+      return headers['Location'] || headers['location'] || null;
+    }
+    console.error('createResumableSession_ HTTP ' + response.getResponseCode() + ': ' + response.getContentText());
+    return null;
+  } catch (e) {
+    console.error('createResumableSession_ error: ' + e);
+    return null;
+  }
+}
+
+function uploadChunkToSession_(sessionUri, chunkBytes, byteOffset, totalBytes) {
+  var endByte = byteOffset + chunkBytes.length - 1;
+  var contentRange = 'bytes ' + byteOffset + '-' + endByte + '/' + totalBytes;
+  try {
+    var response = UrlFetchApp.fetch(sessionUri, {
+      method: 'PUT',
+      headers: { 'Content-Range': contentRange },
+      payload: chunkBytes,
+      muteHttpExceptions: true,
+    });
+    var code = response.getResponseCode();
+    if (code === 200 || code === 201) {
+      var data = JSON.parse(response.getContentText());
+      return { fileId: data.id };
+    }
+    if (code === 308) return { fileId: null };
+    console.error('uploadChunkToSession_ HTTP ' + code + ': ' + response.getContentText());
+    return { error: 'Błąd przesyłania (HTTP ' + code + ').' };
+  } catch (e) {
+    console.error('uploadChunkToSession_ error: ' + e);
+    return { error: 'Błąd sieci podczas przesyłania.' };
   }
 }
 

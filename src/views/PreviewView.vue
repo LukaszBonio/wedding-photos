@@ -29,7 +29,7 @@ function addMore(): void {
 <template>
   <section class="screen">
     <div class="screen__inner">
-      <h2 class="title">Twoje zdjęcia</h2>
+      <h2 class="title">Twoje pliki</h2>
 
       <ul class="grid" role="list">
         <li v-for="photo in store.photos" :key="photo.uploadId">

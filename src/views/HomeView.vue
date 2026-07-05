@@ -29,7 +29,7 @@ function onSelect(files: File[]): void {
       <header class="intro">
         <p class="eyebrow">Wesele</p>
         <h1 class="title">Anna & Łukasz</h1>
-        <p class="lead">Zrób zdjęcie albo wybierz je z galerii — trafi wprost do naszego albumu.</p>
+        <p class="lead">Zrób zdjęcie, nagraj filmik albo wybierz z galerii — trafi wprost do naszego albumu.</p>
       </header>
 
       <PhotoSourceButtons @select="onSelect" />

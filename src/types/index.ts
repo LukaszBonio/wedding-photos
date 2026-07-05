@@ -1,6 +1,9 @@
 /** Image formats the client can recognise from a byte signature. */
 export type DetectedImageFormat = 'image/jpeg' | 'image/png' | 'image/heic';
 
+/** Media kind flag attached to validated files. */
+export type MediaKind = 'image' | 'video';
+
 /** Lifecycle status of a photo in the upload queue. */
 export type PhotoStatus = 'ready' | 'uploading' | 'success' | 'error' | 'offline';
 

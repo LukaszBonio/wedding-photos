@@ -30,6 +30,6 @@ describe('App', () => {
     const store = useUploadStore();
     store.view = 'preview';
     await flushPromises();
-    expect(wrapper.text()).toContain('Twoje zdjęcia');
+    expect(wrapper.text()).toContain('Twoje pliki');
   });
 });

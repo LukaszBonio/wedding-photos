@@ -29,7 +29,7 @@ export interface QueueItem {
 
 export interface UploadQueueDeps {
   /** Performs one upload attempt (fetches the blob, calls the API). */
-  upload: (item: QueueItem) => Promise<UploadResult>;
+  upload: (item: QueueItem, onProgress?: (percent: number) => void) => Promise<UploadResult>;
   /** Persists a status/progress change to IndexedDB. */
   persist: (uploadId: string, changes: Partial<QueueItem>) => Promise<void>;
   /** Removes a photo from IndexedDB after a confirmed success. */
@@ -104,7 +104,10 @@ export function createUploadQueue(deps: UploadQueueDeps): UploadQueue {
 
     let result: UploadResult;
     try {
-      result = await deps.upload(item);
+      result = await deps.upload(item, (percent) => {
+        item.progress = percent;
+        emit(item);
+      });
     } catch {
       result = { kind: 'retryable', reason: 'Błąd sieci.' };
     }

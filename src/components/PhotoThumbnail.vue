@@ -1,9 +1,13 @@
 <script setup lang="ts">
+import { computed } from 'vue';
+
 import type { PhotoStatus } from '@/types';
 import type { PhotoVm } from '@/stores/uploadStore';
 
-defineProps<{ photo: PhotoVm; removable?: boolean }>();
+const props = defineProps<{ photo: PhotoVm; removable?: boolean }>();
 const emit = defineEmits<{ remove: [uploadId: string] }>();
+
+const isVideo = computed(() => props.photo.mimeType?.startsWith('video/'));
 
 const STATUS_LABEL: Record<PhotoStatus, string> = {
   ready: 'Gotowe do wysłania',
@@ -16,7 +20,12 @@ const STATUS_LABEL: Record<PhotoStatus, string> = {
 
 <template>
   <figure class="thumb" :class="`thumb--${photo.status}`">
-    <img class="thumb__img" :src="photo.objectUrl" alt="Wybrane zdjęcie" />
+    <video v-if="isVideo" class="thumb__img" :src="photo.objectUrl" muted playsinline preload="metadata" />
+    <img v-else class="thumb__img" :src="photo.objectUrl" alt="Wybrane zdjęcie" />
+
+    <span v-if="isVideo" class="thumb__video-badge" aria-label="Film">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+    </span>
     <figcaption class="visually-hidden">{{ STATUS_LABEL[photo.status] }}</figcaption>
 
     <span class="thumb__badge" role="img" :aria-label="STATUS_LABEL[photo.status]">
@@ -168,5 +177,26 @@ const STATUS_LABEL: Record<PhotoStatus, string> = {
 .thumb__remove:focus-visible {
   outline: 3px solid var(--color-gold-deep);
   outline-offset: 2px;
+}
+
+.thumb__video-badge {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: #fff;
+  background: color-mix(in srgb, var(--color-ink) 50%, transparent);
+  pointer-events: none;
+}
+
+.thumb__video-badge svg {
+  width: 18px;
+  height: 18px;
 }
 </style>

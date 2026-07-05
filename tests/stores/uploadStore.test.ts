@@ -54,12 +54,21 @@ describe('uploadStore', () => {
     expect(store.photos.every((p) => p.status === 'ready')).toBe(true);
   });
 
-  it('rejects a video with a clear message and stages nothing', async () => {
+  it('accepts a supported video file and stages it', async () => {
     const store = useUploadStore();
     const video = new File([new Uint8Array([0, 0, 0, 1])], 'clip.mp4', { type: 'video/mp4' });
     await store.pickFiles([video]);
+    expect(store.photos).toHaveLength(1);
+    expect(store.photos[0]!.mimeType).toBe('video/mp4');
+    expect(store.view).toBe('preview');
+  });
+
+  it('rejects an unsupported video format with a clear message', async () => {
+    const store = useUploadStore();
+    const video = new File([new Uint8Array([0, 0, 0, 1])], 'clip.avi', { type: 'video/avi' });
+    await store.pickFiles([video]);
     expect(store.photos).toHaveLength(0);
-    expect(store.pickError).toContain('filmy');
+    expect(store.pickError).toContain('format wideo');
     expect(store.view).toBe('home');
   });
 

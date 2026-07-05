@@ -1,21 +1,18 @@
 /**
- * The single API client: posts one photo to the Google Apps Script Web App.
+ * API client: posts photos (single request) and videos (chunked) to the
+ * Google Apps Script Web App.
  *
  * Transport constraints (GAS cannot answer a CORS preflight):
  *  - method POST, Content-Type text/plain → a "simple request", no preflight,
  *  - no custom headers,
- *  - JSON body with Base64 image data inside.
- *
- * GAS always returns HTTP 200, so success/failure is read from the body's
- * `status` field. Transport-level failures (network, timeout, 429/5xx) are
- * classified as retryable; backend rejections and 4xx as permanent.
+ *  - JSON body with Base64 data inside.
  */
-import { MAX_UPLOAD_BASE64_LENGTH } from '@/constants';
+import { MAX_UPLOAD_BASE64_LENGTH, VIDEO_CHUNK_SIZE } from '@/constants';
 import { safeParseUploadResponse } from '@/schemas';
 import { isRetryableHttpStatus } from '@/utils/backoff';
 import { blobToBase64, estimateBase64Length } from '@/utils/blobToBase64';
 
-/** Everything needed to upload one photo. */
+/** Everything needed to upload one media file. */
 export interface UploadInput {
   uploadId: string;
   blob: Blob;
@@ -32,29 +29,13 @@ export type UploadResult =
 
 /** Per-attempt request timeout. */
 export const REQUEST_TIMEOUT_MS = 60_000;
+/** Longer timeout for video chunk uploads. */
+export const VIDEO_CHUNK_TIMEOUT_MS = 120_000;
 
-/**
- * Uploads a single photo. Never throws — every outcome is a classified result.
- */
-export async function uploadPhoto(
-  input: UploadInput,
-  timeoutMs = REQUEST_TIMEOUT_MS,
-): Promise<UploadResult> {
-  // Cheap guard before encoding a possibly-huge blob.
-  if (estimateBase64Length(input.blob.size) > MAX_UPLOAD_BASE64_LENGTH) {
-    return { kind: 'permanent', reason: 'Zdjęcie jest zbyt duże.' };
-  }
-
-  const dataBase64 = await blobToBase64(input.blob);
-  const body = JSON.stringify({
-    token: import.meta.env.VITE_UPLOAD_TOKEN,
-    uploadId: input.uploadId,
-    filename: input.filename,
-    mimeType: input.mimeType,
-    caption: input.caption,
-    dataBase64,
-  });
-
+async function postToGas(
+  body: string,
+  timeoutMs: number,
+): Promise<UploadResult | { kind: 'json'; data: unknown }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -62,7 +43,6 @@ export async function uploadPhoto(
   try {
     response = await fetch(import.meta.env.VITE_GAS_URL, {
       method: 'POST',
-      // Only a safelisted Content-Type — no custom headers, so no CORS preflight.
       headers: { 'Content-Type': 'text/plain' },
       body,
       signal: controller.signal,
@@ -90,13 +70,94 @@ export async function uploadPhoto(
     return { kind: 'retryable', reason: 'Nieprawidłowa odpowiedź serwera.' };
   }
 
-  const parsed = safeParseUploadResponse(json);
-  if (!parsed.success) {
-    return { kind: 'retryable', reason: 'Nieoczekiwana odpowiedź serwera.' };
-  }
-  if (parsed.data.status === 'ok' && parsed.data.fileId) {
+  return { kind: 'json', data: json };
+}
+
+function classifyResponse(raw: UploadResult | { kind: 'json'; data: unknown }): UploadResult {
+  if (raw.kind !== 'json') return raw as UploadResult;
+  const parsed = safeParseUploadResponse(raw.data);
+  if (!parsed.success) return { kind: 'retryable', reason: 'Nieoczekiwana odpowiedź serwera.' };
+  if (parsed.data.status === 'ok' && parsed.data.fileId)
     return { kind: 'success', fileId: parsed.data.fileId };
+  if (parsed.data.status === 'error')
+    return { kind: 'permanent', reason: parsed.data.message };
+  return { kind: 'retryable', reason: parsed.data.message };
+}
+
+/**
+ * Uploads a single photo. Never throws — every outcome is a classified result.
+ */
+export async function uploadPhoto(
+  input: UploadInput,
+  timeoutMs = REQUEST_TIMEOUT_MS,
+): Promise<UploadResult> {
+  if (estimateBase64Length(input.blob.size) > MAX_UPLOAD_BASE64_LENGTH) {
+    return { kind: 'permanent', reason: 'Zdjęcie jest zbyt duże.' };
   }
-  // Backend rejected the upload (bad token, validation, event closed, ...).
-  return { kind: 'permanent', reason: parsed.data.message };
+
+  const dataBase64 = await blobToBase64(input.blob);
+  const body = JSON.stringify({
+    token: import.meta.env.VITE_UPLOAD_TOKEN,
+    uploadId: input.uploadId,
+    filename: input.filename,
+    mimeType: input.mimeType,
+    caption: input.caption,
+    dataBase64,
+  });
+
+  const raw = await postToGas(body, timeoutMs);
+  return classifyResponse(raw);
+}
+
+/**
+ * Uploads a video in chunks through GAS → Drive API resumable upload.
+ * Never throws. Reports progress via optional callback.
+ */
+export async function uploadVideo(
+  input: UploadInput,
+  onProgress?: (percent: number) => void,
+): Promise<UploadResult> {
+  const totalBytes = input.blob.size;
+  const totalChunks = Math.ceil(totalBytes / VIDEO_CHUNK_SIZE);
+
+  for (let i = 0; i < totalChunks; i++) {
+    const start = i * VIDEO_CHUNK_SIZE;
+    const end = Math.min(start + VIDEO_CHUNK_SIZE, totalBytes);
+    const chunkBlob = input.blob.slice(start, end);
+    const dataBase64 = await blobToBase64(chunkBlob);
+    const isLastChunk = i === totalChunks - 1;
+
+    const body = JSON.stringify({
+      action: 'uploadVideoChunk',
+      token: import.meta.env.VITE_UPLOAD_TOKEN,
+      uploadId: input.uploadId,
+      chunkIndex: i,
+      totalChunks,
+      totalBytes,
+      byteOffset: start,
+      filename: input.filename,
+      mimeType: input.mimeType,
+      caption: input.caption,
+      dataBase64,
+    });
+
+    const raw = await postToGas(body, VIDEO_CHUNK_TIMEOUT_MS);
+
+    if (raw.kind !== 'json') return raw as UploadResult;
+
+    const parsed = safeParseUploadResponse(raw.data);
+    if (!parsed.success)
+      return { kind: 'retryable', reason: 'Nieoczekiwana odpowiedź serwera.' };
+    if (parsed.data.status === 'error')
+      return { kind: 'permanent', reason: parsed.data.message };
+
+    if (isLastChunk) {
+      if (parsed.data.fileId) return { kind: 'success', fileId: parsed.data.fileId };
+      return { kind: 'retryable', reason: 'Brak potwierdzenia zapisu.' };
+    }
+
+    onProgress?.(Math.round(((i + 1) / totalChunks) * 100));
+  }
+
+  return { kind: 'retryable', reason: 'Nieoczekiwany koniec przesyłania.' };
 }

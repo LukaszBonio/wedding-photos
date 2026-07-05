@@ -29,7 +29,7 @@ function onChange(event: Event): void {
       ref="cameraInput"
       class="visually-hidden"
       type="file"
-      accept="image/*"
+      accept="image/*,video/*"
       capture="environment"
       @change="onChange"
     />
@@ -37,7 +37,7 @@ function onChange(event: Event): void {
       ref="galleryInput"
       class="visually-hidden"
       type="file"
-      accept="image/*"
+      accept="image/*,video/*"
       multiple
       @change="onChange"
     />
