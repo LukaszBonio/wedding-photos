@@ -26,6 +26,7 @@ function finish(): void {
       <ul class="grid" role="list">
         <li v-for="photo in store.photos" :key="photo.uploadId">
           <PhotoThumbnail :photo="photo" />
+          <p v-if="photo.error" class="item-error">{{ photo.error }}</p>
         </li>
       </ul>
 
@@ -44,5 +45,11 @@ function finish(): void {
 .lead {
   margin: 0;
   color: var(--color-text-muted);
+}
+.item-error {
+  margin: 0.3rem 0 0;
+  font-size: 0.75rem;
+  color: var(--color-error);
+  word-break: break-word;
 }
 </style>
