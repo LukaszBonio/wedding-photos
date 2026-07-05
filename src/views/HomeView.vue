@@ -5,6 +5,7 @@ import ProgressBar from '@/components/ProgressBar.vue';
 import { useUploadStore } from '@/stores/uploadStore';
 
 const store = useUploadStore();
+const heroSrc = `${import.meta.env.BASE_URL}hero.jpg`;
 
 function onSelect(files: File[]): void {
   void store.pickFiles(files);
@@ -12,13 +13,22 @@ function onSelect(files: File[]): void {
 </script>
 
 <template>
-  <section class="screen">
+  <section class="screen home-screen">
+    <div class="hero" aria-hidden="true">
+      <img
+        :src="heroSrc"
+        alt=""
+        class="hero__photo"
+      />
+      <div class="hero__overlay" />
+    </div>
+
     <div class="screen__inner">
       <GoldRule />
 
       <header class="intro">
-        <p class="eyebrow">Nasze wesele</p>
-        <h1 class="title">Podziel się chwilą</h1>
+        <p class="eyebrow">Wesele</p>
+        <h1 class="title">Anna & Łukasz</h1>
         <p class="lead">Zrób zdjęcie albo wybierz je z galerii — trafi wprost do naszego albumu.</p>
       </header>
 
@@ -43,6 +53,44 @@ function onSelect(files: File[]): void {
 </template>
 
 <style scoped>
+.home-screen {
+  position: relative;
+  padding-top: 0 !important;
+  overflow: hidden;
+}
+
+.hero {
+  position: absolute;
+  top: 0;
+  left: -1.5rem;
+  right: -1.5rem;
+  height: 50vh;
+  overflow: hidden;
+}
+
+.hero__photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 20%;
+  display: block;
+}
+
+.hero__overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent 30%,
+    color-mix(in srgb, var(--color-cream) 50%, transparent) 65%,
+    var(--color-cream) 100%
+  );
+}
+
+.home-screen > .screen__inner {
+  margin-top: 42vh;
+}
+
 .intro {
   display: flex;
   flex-direction: column;

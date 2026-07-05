@@ -15,7 +15,7 @@ describe('HomeView', () => {
 
   it('renders the greeting and both capture buttons', () => {
     const wrapper = mount(HomeView);
-    expect(wrapper.text()).toContain('Podziel się chwilą');
+    expect(wrapper.text()).toContain('Anna & Łukasz');
     expect(wrapper.findAll('button')).toHaveLength(2);
     expect(wrapper.text()).toContain('Zrób zdjęcie');
     expect(wrapper.text()).toContain('Wybierz z galerii');

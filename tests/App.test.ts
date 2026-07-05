@@ -21,7 +21,7 @@ describe('App', () => {
   it('starts on the home view', async () => {
     const wrapper = mount(App);
     await flushPromises();
-    expect(wrapper.text()).toContain('Podziel się chwilą');
+    expect(wrapper.text()).toContain('Anna & Łukasz');
   });
 
   it('switches views with the state machine', async () => {
