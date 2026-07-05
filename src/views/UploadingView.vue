@@ -15,7 +15,7 @@ const percent = computed(() =>
 <template>
   <section class="screen">
     <div class="screen__inner">
-      <h2 class="title">Wysyłam zdjęcia…</h2>
+      <h2 class="title">Wysyłam…</h2>
       <p class="lead">{{ store.counts.success }} z {{ store.counts.total }} wysłane</p>
 
       <ProgressBar :value="percent" label="Postęp wysyłki" />

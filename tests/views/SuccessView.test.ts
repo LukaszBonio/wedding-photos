@@ -21,7 +21,7 @@ describe('SuccessView', () => {
     );
     const wrapper = mount(SuccessView);
     expect(wrapper.text()).toContain('Dziękujemy!');
-    expect(wrapper.text()).toContain('Wysłane zdjęcia: 2');
-    expect(wrapper.text()).toContain('Dodaj kolejne zdjęcia');
+    expect(wrapper.text()).toContain('Wysłane pliki: 2');
+    expect(wrapper.text()).toContain('Dodaj więcej');
   });
 });

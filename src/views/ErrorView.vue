@@ -17,7 +17,7 @@ function finish(): void {
 <template>
   <section class="screen">
     <div class="screen__inner">
-      <h2 class="title">Część zdjęć nie dotarła</h2>
+      <h2 class="title">Część plików nie dotarła</h2>
       <p class="lead">
         Wysłano {{ store.counts.success }} z {{ store.counts.total }}. Sprawdź połączenie i spróbuj
         ponownie.

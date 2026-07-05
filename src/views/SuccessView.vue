@@ -30,11 +30,11 @@ function again(): void {
 
       <header class="success__head">
         <h1 class="title">Dziękujemy!</h1>
-        <p class="lead">Twoje zdjęcia są już w naszym albumie.</p>
-        <p class="count">Wysłane zdjęcia: {{ store.counts.success }}</p>
+        <p class="lead">Wszystko dotarło do naszego albumu.</p>
+        <p class="count">Wysłane pliki: {{ store.counts.success }}</p>
       </header>
 
-      <AppButton variant="primary" @click="again">Dodaj kolejne zdjęcia</AppButton>
+      <AppButton variant="primary" @click="again">Dodaj więcej</AppButton>
 
       <GoldRule />
     </div>
