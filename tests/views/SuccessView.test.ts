@@ -16,8 +16,8 @@ describe('SuccessView', () => {
   it('thanks the guest and shows the sent count', () => {
     const store = useUploadStore();
     store.photos.push(
-      { uploadId: 'a', objectUrl: 'blob:a', status: 'success', progress: 100, error: null },
-      { uploadId: 'b', objectUrl: 'blob:b', status: 'success', progress: 100, error: null },
+      { uploadId: 'a', objectUrl: 'blob:a', mimeType: 'image/jpeg', status: 'success', progress: 100, error: null },
+      { uploadId: 'b', objectUrl: 'blob:b', mimeType: 'image/jpeg', status: 'success', progress: 100, error: null },
     );
     const wrapper = mount(SuccessView);
     expect(wrapper.text()).toContain('Dziękujemy!');

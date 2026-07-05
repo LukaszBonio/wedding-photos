@@ -7,6 +7,7 @@ import type { PhotoVm } from '@/stores/uploadStore';
 const photo = (status: PhotoVm['status']): PhotoVm => ({
   uploadId: 'x1',
   objectUrl: 'blob:x1',
+  mimeType: 'image/jpeg',
   status,
   progress: 100,
   error: null,

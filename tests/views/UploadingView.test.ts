@@ -16,8 +16,8 @@ describe('UploadingView', () => {
   it('shows the aggregate progress', () => {
     const store = useUploadStore();
     store.photos.push(
-      { uploadId: 'a', objectUrl: 'blob:a', status: 'success', progress: 100, error: null },
-      { uploadId: 'b', objectUrl: 'blob:b', status: 'uploading', progress: 0, error: null },
+      { uploadId: 'a', objectUrl: 'blob:a', mimeType: 'image/jpeg', status: 'success', progress: 100, error: null },
+      { uploadId: 'b', objectUrl: 'blob:b', mimeType: 'image/jpeg', status: 'uploading', progress: 0, error: null },
     );
     const wrapper = mount(UploadingView);
     expect(wrapper.text()).toContain('1 z 2 wysłane');
