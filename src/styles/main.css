@@ -1,0 +1,174 @@
+/*
+ * Design system — wedding photo upload.
+ * Palette: biel / beż / złoto. Aesthetic: elegant wedding stationery
+ * (cream cardstock, thin gold foil rules, a stately serif display).
+ * No web fonts: an offline-first system serif stack keeps it instant and
+ * dependency-free while reading as "invitation" on iOS/macOS.
+ */
+
+:root {
+  /* Palette */
+  --color-cream: #faf7f1;
+  --color-ivory: #ffffff;
+  --color-sand: #e7dcc8;
+  --color-sand-soft: #f3ece0;
+  --color-gold: #c8a96a;
+  --color-gold-deep: #a9863f;
+  --color-ink: #2b2620;
+  --color-ink-soft: #6b6355;
+  --color-error: #9a3b34;
+  --color-error-soft: #f7e9e7;
+
+  /* Semantic */
+  --color-bg: var(--color-cream);
+  --color-surface: var(--color-ivory);
+  --color-text: var(--color-ink);
+  --color-text-muted: var(--color-ink-soft);
+  --color-accent: var(--color-gold);
+
+  /* Type */
+  --font-display:
+    'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, 'Times New Roman',
+    serif;
+  --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  /* Layout */
+  --radius: 18px;
+  --radius-sm: 12px;
+  --tap-target-min: 48px;
+  --content-max: 30rem;
+  --space: 1rem;
+
+  /* Motion */
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --dur: 260ms;
+
+  /* iPhone safe-area insets (require viewport-fit=cover in index.html) */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  min-height: 100dvh;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: 18px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+}
+
+#app {
+  min-height: 100dvh;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: 1.15;
+  margin: 0;
+}
+
+button {
+  font-family: inherit;
+}
+
+/* Shared layout for a single centred screen. */
+.screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  padding: calc(2rem + var(--safe-top)) 1.5rem calc(2rem + var(--safe-bottom));
+  text-align: center;
+}
+
+.screen__inner {
+  width: 100%;
+  max-width: var(--content-max);
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* Subtle glassmorphism surface. */
+.surface-glass {
+  background: color-mix(in srgb, var(--color-ivory) 78%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-sand) 70%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: var(--radius);
+}
+
+/* View transition (fade + gentle rise). */
+.view-enter-active,
+.view-leave-active {
+  transition:
+    opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+}
+.view-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.view-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+.view-leave-active {
+  position: absolute;
+  inset: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* Utilities shared across views. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  border: 0;
+}
+
+.grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: 0.6rem;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
