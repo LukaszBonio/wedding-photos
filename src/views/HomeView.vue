@@ -29,12 +29,14 @@ function onSelect(files: File[]): void {
       <header class="intro">
         <p class="eyebrow">Wesele</p>
         <h1 class="title">Anna & Łukasz</h1>
-        <p class="lead">Zrób zdjęcie, nagraj filmik albo wybierz z galerii — trafi wprost do naszego albumu.</p>
+        <p class="lead">Zrób zdjęcie lub wybierz z galerii — trafi wprost do naszego albumu.</p>
       </header>
 
       <PhotoSourceButtons @select="onSelect" />
 
       <p class="photographer-note">Prosimy, nie przeszkadzajcie fotografowi podczas sesji — Wasze ujęcia zbierzemy tutaj!</p>
+
+      <p class="privacy-note">Wysyłając zdjęcia, zgadzasz się na ich przechowywanie w prywatnym albumie pary młodej (Google Drive). Administrator: Łukasz Bonio, kontakt: lb@szuszik.io. Aby usunąć zdjęcia, napisz na powyższy adres.</p>
 
       <p v-if="store.pickError" class="alert" role="alert">{{ store.pickError }}</p>
 
@@ -126,6 +128,15 @@ function onSelect(files: File[]): void {
   font-size: 0.85rem;
   text-align: center;
   line-height: 1.45;
+}
+
+.privacy-note {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+  text-align: center;
+  line-height: 1.5;
+  opacity: 0.7;
 }
 
 .alert {

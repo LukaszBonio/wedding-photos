@@ -1,15 +1,15 @@
 /**
  * Wedding photo upload backend — Google Apps Script Web App.
- * VERSION 6 — photo-only (video upload removed).
+ * VERSION 7 — audit hardening (lower daily limit, PropertiesService dedup).
  */
 
-var CODE_VERSION = 6;
+var CODE_VERSION = 7;
 
 var MAX_DECODED_BYTES = 50 * 1024 * 1024;
 var MAX_BASE64_LENGTH = Math.ceil(MAX_DECODED_BYTES / 3) * 4 + 8;
 var CACHE_TTL_SECONDS = 21600;
 var MAX_CAPTION_LENGTH = 200;
-var DEFAULT_MAX_UPLOADS_PER_DAY = 5000;
+var DEFAULT_MAX_UPLOADS_PER_DAY = 500;
 
 var ALLOWED_TYPES = {
   'image/jpeg': 'jpg',
@@ -63,10 +63,10 @@ function handlePhotoUpload_(payload, config) {
   if (!isEventOpen_(config.eventEndDate, new Date()))
     return error_('Zbieranie zdjęć zostało zakończone.');
 
+  var dedupFileId = getDedupFileId_(payload.uploadId);
+  if (dedupFileId) return ok_('Zdjęcie zostało już przyjęte.', dedupFileId);
+
   var cache = CacheService.getScriptCache();
-  var dedupKey = 'up_' + payload.uploadId;
-  var existingFileId = cache.get(dedupKey);
-  if (existingFileId) return ok_('Zdjęcie zostało już przyjęte.', existingFileId);
 
   if (!isBase64LengthAllowed_(payload.dataBase64.length))
     return error_('Plik jest zbyt duży.');
@@ -90,7 +90,7 @@ function handlePhotoUpload_(payload, config) {
 
   if (caption) file.setDescription(caption);
   var fileId = file.getId();
-  cache.put(dedupKey, fileId, CACHE_TTL_SECONDS);
+  setDedupFileId_(payload.uploadId, fileId);
   incrementDailyCount_(cache);
   return ok_('Zdjęcie zapisane.', fileId);
 }
@@ -214,6 +214,16 @@ function isNonEmptyString_(v) { return typeof v === 'string' && v.length > 0; }
 function isValidUploadId_(v) { return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v); }
 function isDecodedSizeAllowed_(byteLength) { return byteLength <= MAX_DECODED_BYTES; }
 function isBase64LengthAllowed_(length) { return length <= MAX_BASE64_LENGTH; }
+
+// ---- Dedup (PropertiesService — no TTL, survives CacheService expiry) ------
+
+function getDedupFileId_(uploadId) {
+  return PropertiesService.getScriptProperties().getProperty('dup_' + uploadId);
+}
+
+function setDedupFileId_(uploadId, fileId) {
+  PropertiesService.getScriptProperties().setProperty('dup_' + uploadId, fileId);
+}
 
 // ---- Daily counter ---------------------------------------------------------
 
