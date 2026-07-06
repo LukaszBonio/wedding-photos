@@ -102,3 +102,26 @@ export async function uploadPhoto(input: UploadInput): Promise<UploadResult> {
   return classifyResponse(raw);
 }
 
+/** A single thumbnail entry from the gallery endpoint. */
+export interface RecentPhoto {
+  id: string;
+  name: string;
+  date: string;
+  thumbnail: string;
+}
+
+/** Fetches recent photo thumbnails. Returns empty array on any failure. */
+export async function fetchRecentPhotos(): Promise<RecentPhoto[]> {
+  const body = JSON.stringify({
+    token: import.meta.env.VITE_UPLOAD_TOKEN,
+    action: 'listRecent',
+  });
+
+  const raw = await postToGas(body, REQUEST_TIMEOUT_MS);
+  if (raw.kind !== 'json') return [];
+
+  const data = raw.data as { status?: string; photos?: RecentPhoto[] };
+  if (data.status === 'ok' && Array.isArray(data.photos)) return data.photos;
+  return [];
+}
+

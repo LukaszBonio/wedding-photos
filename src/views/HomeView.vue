@@ -2,6 +2,7 @@
 import GoldRule from '@/components/GoldRule.vue';
 import PhotoSourceButtons from '@/components/PhotoSourceButtons.vue';
 import ProgressBar from '@/components/ProgressBar.vue';
+import RecentGallery from '@/components/RecentGallery.vue';
 import { useUploadStore } from '@/stores/uploadStore';
 
 const store = useUploadStore();
@@ -35,6 +36,8 @@ function onSelect(files: File[]): void {
       <PhotoSourceButtons @select="onSelect" />
 
       <p class="photographer-note">Prosimy, nie przeszkadzajcie fotografowi podczas sesji — Wasze ujęcia zbierzemy tutaj!</p>
+
+      <RecentGallery />
 
       <p class="privacy-note">Wysyłając zdjęcia, zgadzasz się na ich przechowywanie w prywatnym albumie pary młodej (Google Drive). Administrator: Łukasz Bonio, kontakt: lb@szuszik.io. Aby usunąć zdjęcia, napisz na powyższy adres.</p>
 

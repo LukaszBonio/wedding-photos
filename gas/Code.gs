@@ -1,9 +1,11 @@
 /**
  * Wedding photo upload backend — Google Apps Script Web App.
- * VERSION 7 — audit hardening (lower daily limit, PropertiesService dedup).
+ * VERSION 8 — gallery thumbnails (listRecent action).
  */
 
-var CODE_VERSION = 7;
+var CODE_VERSION = 8;
+var RECENT_PHOTOS_COUNT = 12;
+var THUMBNAIL_SIZE = 200;
 
 var MAX_DECODED_BYTES = 50 * 1024 * 1024;
 var MAX_BASE64_LENGTH = Math.ceil(MAX_DECODED_BYTES / 3) * 4 + 8;
@@ -41,6 +43,9 @@ function doPost(e) {
       return error_('Nieprawidłowy format danych.');
     }
 
+    if (payload.action === 'listRecent') {
+      return handleListRecent_(payload, config);
+    }
     return handlePhotoUpload_(payload, config);
   } catch (err) {
     console.error('doPost error: ' + (err && err.stack ? err.stack : err));
@@ -50,6 +55,50 @@ function doPost(e) {
 
 function doGet() {
   return jsonOutput_({ status: 'ok', message: 'Wedding upload endpoint.', version: CODE_VERSION, fileId: null });
+}
+
+// ---- Recent photos gallery ------------------------------------------------
+
+function handleListRecent_(payload, config) {
+  if (!verifyToken_(payload.token, config.uploadToken))
+    return error_('Nieprawidłowy token.');
+
+  var folder = DriveApp.getFolderById(config.folderId);
+  var files = folder.getFilesByType(MimeType.JPEG);
+  var items = [];
+
+  while (files.hasNext() && items.length < 100) {
+    var f = files.next();
+    items.push({ file: f, date: f.getDateCreated() });
+  }
+
+  var pngFiles = folder.getFilesByType(MimeType.PNG);
+  while (pngFiles.hasNext() && items.length < 100) {
+    var p = pngFiles.next();
+    items.push({ file: p, date: p.getDateCreated() });
+  }
+
+  items.sort(function (a, b) { return b.date.getTime() - a.date.getTime(); });
+  items = items.slice(0, RECENT_PHOTOS_COUNT);
+
+  var photos = [];
+  for (var i = 0; i < items.length; i++) {
+    try {
+      var thumb = items[i].file.getThumbnail();
+      var b64 = Utilities.base64Encode(thumb.getBytes());
+      var mime = thumb.getContentType() || 'image/png';
+      photos.push({
+        id: items[i].file.getId(),
+        name: items[i].file.getName(),
+        date: items[i].date.toISOString(),
+        thumbnail: 'data:' + mime + ';base64,' + b64,
+      });
+    } catch (thumbErr) {
+      console.warn('Thumbnail error for ' + items[i].file.getName() + ': ' + thumbErr);
+    }
+  }
+
+  return jsonOutput_({ status: 'ok', photos: photos });
 }
 
 // ---- Photo upload ----------------------------------------------------------
