@@ -42,7 +42,12 @@ watch(
 watch(
   () => router.view.value,
   (next) => {
-    if (next !== store.view) store.view = next;
+    if (next === store.view) return;
+    if (next !== 'home' && !store.hasPhotos) {
+      store.reset();
+      return;
+    }
+    store.view = next;
   },
 );
 </script>

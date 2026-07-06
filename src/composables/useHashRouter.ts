@@ -49,11 +49,17 @@ export function useHashRouter(): HashRouter {
   window.addEventListener('hashchange', sync);
   onScopeDispose(() => window.removeEventListener('hashchange', sync));
 
+  const TRANSIENT: ReadonlySet<AppView> = new Set(['uploading', 'success', 'error', 'offline']);
+
   const navigate = (next: AppView): void => {
     view.value = next;
     const targetHash = hashForView(next);
     if (typeof window !== 'undefined' && window.location.hash !== targetHash) {
-      window.location.hash = targetHash;
+      if (TRANSIENT.has(next)) {
+        history.replaceState(null, '', targetHash);
+      } else {
+        window.location.hash = targetHash;
+      }
     }
   };
 

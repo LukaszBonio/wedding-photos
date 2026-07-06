@@ -1,9 +1,9 @@
 /**
  * Wedding photo upload backend — Google Apps Script Web App.
- * VERSION 8 — gallery thumbnails (listRecent action).
+ * VERSION 9 — content-hash dedup (MD5) + gallery thumbnails.
  */
 
-var CODE_VERSION = 8;
+var CODE_VERSION = 9;
 var RECENT_PHOTOS_COUNT = 12;
 var THUMBNAIL_SIZE = 200;
 
@@ -127,6 +127,13 @@ function handlePhotoUpload_(payload, config) {
   if (detectedType !== payload.mimeType)
     return error_('Typ pliku nie zgadza się z zawartością.');
 
+  var contentHash = computeContentHash_(bytes);
+  var existingByHash = getContentHashFileId_(contentHash);
+  if (existingByHash) {
+    setDedupFileId_(payload.uploadId, existingByHash);
+    return ok_('To zdjęcie zostało już wcześniej przesłane.', existingByHash);
+  }
+
   var caption = sanitizeCaption_(payload.caption);
   if (getDailyCount_(cache) >= config.maxUploadsPerDay)
     return error_('Dzienny limit został osiągnięty.');
@@ -140,6 +147,7 @@ function handlePhotoUpload_(payload, config) {
   if (caption) file.setDescription(caption);
   var fileId = file.getId();
   setDedupFileId_(payload.uploadId, fileId);
+  setContentHashFileId_(contentHash, fileId);
   incrementDailyCount_(cache);
   return ok_('Zdjęcie zapisane.', fileId);
 }
@@ -272,6 +280,26 @@ function getDedupFileId_(uploadId) {
 
 function setDedupFileId_(uploadId, fileId) {
   PropertiesService.getScriptProperties().setProperty('dup_' + uploadId, fileId);
+}
+
+// ---- Content-hash dedup (MD5 of file bytes) --------------------------------
+
+function computeContentHash_(bytes) {
+  var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, bytes);
+  var hex = '';
+  for (var i = 0; i < digest.length; i++) {
+    var b = (digest[i] + 256) % 256;
+    hex += (b < 16 ? '0' : '') + b.toString(16);
+  }
+  return hex;
+}
+
+function getContentHashFileId_(hash) {
+  return PropertiesService.getScriptProperties().getProperty('chash_' + hash);
+}
+
+function setContentHashFileId_(hash, fileId) {
+  PropertiesService.getScriptProperties().setProperty('chash_' + hash, fileId);
 }
 
 // ---- Daily counter ---------------------------------------------------------
